@@ -385,7 +385,7 @@ const styles = StyleSheet.create({
   modalCard: {
     width: '85%',
     borderRadius: RADIUS.xl,
-    backgroundColor: COLORS.glass,
+    backgroundColor: '#1A1A2E',
     padding: SPACING.lg,
     overflow: 'hidden',
   },
