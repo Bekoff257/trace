@@ -1,7 +1,7 @@
 {
   "expo": {
     "name": "Trace",
-    "slug": "trace",
+    "slug": "location-history-tracker",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
@@ -84,7 +84,8 @@
           "color": "#5B7FFF",
           "sounds": []
         }
-      ]
+      ],
+      "expo-localization"
     ],
     "experiments": {
       "typedRoutes": true
@@ -92,8 +93,9 @@
     "extra": {
       "router": {},
       "eas": {
-        "projectId": "863f8a40-6104-4c09-ad63-8eae03cb77d3"
+        "projectId": "e345294c-7ec9-4a5f-8003-7ad641d3c4e4"
       }
-    }
+    },
+    "owner": "behzod"
   }
 }
