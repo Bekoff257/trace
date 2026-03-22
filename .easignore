@@ -1,0 +1,5 @@
+.vscode/
+android/
+ios/
+.expo/
+node_modules/
