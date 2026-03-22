@@ -9,6 +9,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useAuthStore } from '@stores/authStore';
 import { useLocationStore } from '@stores/locationStore';
+import { supabase } from '@services/supabaseClient';
 import { COLORS, FONT, SPACING, RADIUS, GRADIENTS } from '@constants/theme';
 import SectionLabel from '@components/ui/SectionLabel';
 import { exportVisitSessionsCSV } from '@services/exportService';
@@ -142,7 +143,6 @@ export default function ProfileScreen() {
     setIsCheckingUsername(true);
     setUsernameStatus('idle');
     debounceRef.current = setTimeout(async () => {
-      const { supabase } = await import('@services/supabaseClient');
       const { data } = await supabase
         .from('user_profiles')
         .select('user_id')
@@ -155,21 +155,21 @@ export default function ProfileScreen() {
     return () => { if (debounceRef.current) clearTimeout(debounceRef.current); };
   }, [editUsername, editModalVisible]);
 
-  async function handleEditProfile() {
+  function handleEditProfile() {
     setEditName(displayName);
     setEditUsername(user?.username ?? '');
     setUsernameStatus('idle');
     setUsernameUpdatedAt(null);
+    setEditModalVisible(true);
+    // Fetch cooldown info after modal is already open
     if (user?.id) {
-      const { supabase } = await import('@services/supabaseClient');
-      const { data } = await supabase
+      supabase
         .from('user_profiles')
         .select('username_updated_at')
         .eq('user_id', user.id)
-        .maybeSingle();
-      setUsernameUpdatedAt(data?.username_updated_at ?? null);
+        .maybeSingle()
+        .then(({ data }) => setUsernameUpdatedAt(data?.username_updated_at ?? null));
     }
-    setEditModalVisible(true);
   }
 
   async function handleSaveProfile() {
@@ -178,7 +178,6 @@ export default function ProfileScreen() {
     if (!name || !user?.id) return;
     setIsSaving(true);
     try {
-      const { supabase } = await import('@services/supabaseClient');
       await supabase.auth.updateUser({ data: { display_name: name } });
 
       const profileUpdates: Record<string, any> = { display_name: name };

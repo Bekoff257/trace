@@ -7,6 +7,8 @@ import { initI18n } from '@i18n/index';
 
 import { useEffect, useState } from 'react';
 import { View, ActivityIndicator, StyleSheet } from 'react-native';
+import * as Linking from 'expo-linking';
+import { supabase } from '@services/supabaseClient';
 import { Stack, router, useSegments } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
@@ -99,6 +101,29 @@ export default function RootLayout() {
   useEffect(() => {
     cleanupUnsupportedBackgroundTask();
     initI18n().finally(() => setI18nReady(true));
+
+    // Handle OAuth deep link callback — fires when Android delivers the redirect
+    // URL to the app directly (before openAuthSessionAsync can capture it)
+    async function handleOAuthUrl(url: string) {
+      if (!url.includes('auth/callback')) return;
+      const hash = url.split('#')[1] ?? '';
+      const query = url.split('?')[1] ?? '';
+      const hp = new URLSearchParams(hash);
+      const qp = new URLSearchParams(query);
+      const accessToken = hp.get('access_token') ?? qp.get('access_token');
+      const refreshToken = hp.get('refresh_token') ?? qp.get('refresh_token');
+      const code = qp.get('code');
+      if (accessToken && refreshToken) {
+        await supabase.auth.setSession({ access_token: accessToken, refresh_token: refreshToken });
+      } else if (code) {
+        await supabase.auth.exchangeCodeForSession(code);
+      }
+    }
+
+    const sub = Linking.addEventListener('url', ({ url }) => handleOAuthUrl(url));
+    Linking.getInitialURL().then((url) => { if (url) handleOAuthUrl(url); });
+
+    return () => sub.remove();
   }, []);
 
   if (!i18nReady) return null;

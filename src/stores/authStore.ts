@@ -133,44 +133,38 @@ export const useAuthStore = create<AuthState>((set) => ({
 
       const { data, error } = await supabase.auth.signInWithOAuth({
         provider: 'google',
-        options: {
-          redirectTo,
-          skipBrowserRedirect: true,
-        },
+        options: { redirectTo, skipBrowserRedirect: true },
       });
       if (error) throw error;
 
-      // Open the OAuth URL in an in-app browser
-      const result = await WebBrowser.openAuthSessionAsync(data.url ?? '', redirectTo);
+      // Open the OAuth URL — on Android the deep link handler in _layout.tsx
+      // will call setSession when the redirect URL arrives, which fires
+      // onAuthStateChange. We just need to wait for the browser to close.
+      await WebBrowser.openAuthSessionAsync(data.url ?? '', redirectTo);
 
-      if (result.type === 'success') {
-        // Extract tokens from the callback URL
-        const url = result.url;
-        const params = new URLSearchParams(url.split('#')[1] ?? url.split('?')[1] ?? '');
-        const accessToken = params.get('access_token');
-        const refreshToken = params.get('refresh_token');
-
-        if (accessToken && refreshToken) {
-          const { data: sessionData, error: sessionError } =
-            await supabase.auth.setSession({ access_token: accessToken, refresh_token: refreshToken });
-          if (sessionError) throw sessionError;
-          const username = sessionData.user?.id ? await fetchUsername(sessionData.user.id) : undefined;
-          set({
-            session: sessionData.session,
-            user: sessionData.user ? { ...mapSupabaseUser(sessionData.user), username } : null,
-          });
-        }
+      // After browser closes, check the current session (covers all platforms/flows)
+      const { data: { session } } = await supabase.auth.getSession();
+      if (session) {
+        const username = await fetchUsername(session.user.id);
+        set({
+          session,
+          user: { ...mapSupabaseUser(session.user), username },
+          isLoading: false,
+        });
+      } else {
+        // Browser was dismissed / cancelled — onAuthStateChange will handle
+        // the session if the Linking handler fires later
+        set({ isLoading: false });
       }
-
-      set({ isLoading: false });
     } catch (err: any) {
       set({ isLoading: false, error: err.message ?? 'Google sign in failed' });
     }
   },
 
   signOut: async () => {
-    await supabase.auth.signOut();
+    // Clear local state immediately so the UI responds regardless of network
     set({ session: null, user: null, error: null, isLoading: false });
+    supabase.auth.signOut().catch(() => {}); // best-effort server-side revoke
   },
 
   clearError: () => set({ error: null, pendingEmailConfirmation: false }),
