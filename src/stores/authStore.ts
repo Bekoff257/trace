@@ -20,6 +20,7 @@ interface AuthState {
   signOut: () => Promise<void>;
   clearError: () => void;
   setUsername: (username: string) => void;
+  updateProfile: (updates: { displayName?: string; username?: string }) => void;
 }
 
 async function fetchUsername(userId: string): Promise<string | undefined> {
@@ -75,6 +76,7 @@ export const useAuthStore = create<AuthState>((set) => ({
         set({
           session,
           user: mappedUser ? { ...mappedUser, username } : null,
+          isLoading: false,
         });
       });
     } catch {
@@ -168,7 +170,7 @@ export const useAuthStore = create<AuthState>((set) => ({
 
   signOut: async () => {
     await supabase.auth.signOut();
-    set({ session: null, user: null, error: null });
+    set({ session: null, user: null, error: null, isLoading: false });
   },
 
   clearError: () => set({ error: null, pendingEmailConfirmation: false }),
@@ -176,5 +178,10 @@ export const useAuthStore = create<AuthState>((set) => ({
   setUsername: (username) =>
     set((state) => ({
       user: state.user ? { ...state.user, username } : null,
+    })),
+
+  updateProfile: (updates) =>
+    set((state) => ({
+      user: state.user ? { ...state.user, ...updates } : null,
     })),
 }));

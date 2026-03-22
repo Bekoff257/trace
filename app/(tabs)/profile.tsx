@@ -1,5 +1,5 @@
-import { useState } from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Switch, Alert, Linking, Modal, TextInput } from 'react-native';
+import { useState, useRef, useEffect } from 'react';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Switch, Alert, Linking, Modal, TextInput, ActivityIndicator } from 'react-native';
 import { useTranslation } from 'react-i18next';
 import { LANGUAGES, changeLanguage, getCurrentLanguage, type Language } from '@i18n/index';
 import { router } from 'expo-router';
@@ -56,7 +56,7 @@ function MenuRow({ icon, iconColor, label, value, onPress, isToggle, toggleValue
 
 export default function ProfileScreen() {
   const { t } = useTranslation();
-  const { user, signOut } = useAuthStore();
+  const { user, signOut, updateProfile } = useAuthStore();
   const { isTracking, mode, setTrackingMode, setTracking } = useLocationStore();
   const displayName = user?.displayName ?? 'Alex';
   const email = user?.email ?? 'alex@example.com';
@@ -64,6 +64,12 @@ export default function ProfileScreen() {
   const [isTogglingTracking, setIsTogglingTracking] = useState(false);
   const [editModalVisible, setEditModalVisible] = useState(false);
   const [editName, setEditName] = useState(displayName);
+  const [editUsername, setEditUsername] = useState('');
+  const [usernameUpdatedAt, setUsernameUpdatedAt] = useState<string | null>(null);
+  const [usernameStatus, setUsernameStatus] = useState<'idle' | 'available' | 'taken' | 'invalid' | 'short' | 'unchanged'>('idle');
+  const [isCheckingUsername, setIsCheckingUsername] = useState(false);
+  const [isSaving, setIsSaving] = useState(false);
+  const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [optimisticTracking, setOptimisticTracking] = useState(isTracking);
   const [currentLang, setCurrentLang] = useState<Language>(getCurrentLanguage());
   const batterySaver = mode === 'low_power';
@@ -113,21 +119,85 @@ export default function ProfileScreen() {
     });
   }
 
-  async function handleSaveName() {
+  const USERNAME_REGEX = /^[a-zA-Z0-9_]+$/;
+  const COOLDOWN_MS = 14 * 24 * 60 * 60 * 1000;
+
+  const canChangeUsername = !usernameUpdatedAt ||
+    Date.now() - new Date(usernameUpdatedAt).getTime() > COOLDOWN_MS;
+
+  const daysUntilChange = usernameUpdatedAt && !canChangeUsername
+    ? Math.ceil((COOLDOWN_MS - (Date.now() - new Date(usernameUpdatedAt).getTime())) / (24 * 60 * 60 * 1000))
+    : 0;
+
+  useEffect(() => {
+    if (!editModalVisible) return;
+    if (debounceRef.current) clearTimeout(debounceRef.current);
+
+    const trimmed = editUsername.trim().toLowerCase();
+    if (trimmed === (user?.username ?? '')) { setUsernameStatus('unchanged'); return; }
+    if (!trimmed) { setUsernameStatus('idle'); return; }
+    if (trimmed.length < 3) { setUsernameStatus('short'); return; }
+    if (!USERNAME_REGEX.test(trimmed)) { setUsernameStatus('invalid'); return; }
+
+    setIsCheckingUsername(true);
+    setUsernameStatus('idle');
+    debounceRef.current = setTimeout(async () => {
+      const { supabase } = await import('@services/supabaseClient');
+      const { data } = await supabase
+        .from('user_profiles')
+        .select('user_id')
+        .eq('username', trimmed)
+        .maybeSingle();
+      setIsCheckingUsername(false);
+      setUsernameStatus(data ? 'taken' : 'available');
+    }, 500);
+
+    return () => { if (debounceRef.current) clearTimeout(debounceRef.current); };
+  }, [editUsername, editModalVisible]);
+
+  async function handleEditProfile() {
+    setEditName(displayName);
+    setEditUsername(user?.username ?? '');
+    setUsernameStatus('idle');
+    setUsernameUpdatedAt(null);
+    if (user?.id) {
+      const { supabase } = await import('@services/supabaseClient');
+      const { data } = await supabase
+        .from('user_profiles')
+        .select('username_updated_at')
+        .eq('user_id', user.id)
+        .maybeSingle();
+      setUsernameUpdatedAt(data?.username_updated_at ?? null);
+    }
+    setEditModalVisible(true);
+  }
+
+  async function handleSaveProfile() {
     const name = editName.trim();
-    if (!name) return;
+    const newUsername = editUsername.trim().toLowerCase();
+    if (!name || !user?.id) return;
+    setIsSaving(true);
     try {
       const { supabase } = await import('@services/supabaseClient');
       await supabase.auth.updateUser({ data: { display_name: name } });
+
+      const profileUpdates: Record<string, any> = { display_name: name };
+      if (newUsername && newUsername !== user.username && canChangeUsername && usernameStatus === 'available') {
+        profileUpdates.username = newUsername;
+        profileUpdates.username_updated_at = new Date().toISOString();
+      }
+      await supabase.from('user_profiles').update(profileUpdates).eq('user_id', user.id);
+
+      updateProfile({
+        displayName: name,
+        ...(profileUpdates.username ? { username: profileUpdates.username } : {}),
+      });
       setEditModalVisible(false);
     } catch {
-      Alert.alert(t('common.error'), 'Could not update name.');
+      Alert.alert(t('common.error'), 'Could not update profile.');
+    } finally {
+      setIsSaving(false);
     }
-  }
-
-  function handleEditProfile() {
-    setEditName(displayName);
-    setEditModalVisible(true);
   }
 
   async function handleLanguageSelect(lang: Language) {
@@ -262,21 +332,60 @@ export default function ProfileScreen() {
           <View style={styles.modalCard}>
             <View style={styles.modalCardBorder} />
             <Text style={styles.modalTitle}>{t('profile.editProfile')}</Text>
+
+            <Text style={styles.modalLabel}>{t('profile.displayNameLabel')}</Text>
             <TextInput
               style={styles.modalInput}
               value={editName}
               onChangeText={setEditName}
-              placeholder="Display name"
+              placeholder={t('profile.displayNameLabel')}
               placeholderTextColor={COLORS.textMuted}
               autoFocus
               maxLength={40}
             />
+
+            <Text style={styles.modalLabel}>{t('profile.usernameLabel')}</Text>
+            <View style={styles.modalInputRow}>
+              <TextInput
+                style={[styles.modalInput, styles.modalInputFlex, !canChangeUsername && styles.modalInputDisabled]}
+                value={editUsername}
+                onChangeText={(v) => setEditUsername(v.toLowerCase().replace(/\s/g, ''))}
+                placeholder="@username"
+                placeholderTextColor={COLORS.textMuted}
+                autoCapitalize="none"
+                autoCorrect={false}
+                editable={canChangeUsername}
+                maxLength={30}
+              />
+              {isCheckingUsername && (
+                <ActivityIndicator size="small" color={COLORS.primary} style={styles.modalSpinner} />
+              )}
+            </View>
+
+            {!canChangeUsername ? (
+              <Text style={styles.modalCooldown}>{t('profile.usernameChangeCooldown', { days: daysUntilChange })}</Text>
+            ) : usernameStatus !== 'idle' && usernameStatus !== 'unchanged' ? (
+              <Text style={[styles.modalStatusText, {
+                color: usernameStatus === 'available' ? COLORS.success : COLORS.error,
+              }]}>
+                {usernameStatus === 'available' ? t('username.available')
+                  : usernameStatus === 'taken' ? t('username.taken')
+                  : usernameStatus === 'invalid' ? t('username.invalid')
+                  : t('username.tooShort')}
+              </Text>
+            ) : null}
+
             <View style={styles.modalActions}>
               <TouchableOpacity style={styles.modalBtn} onPress={() => setEditModalVisible(false)} activeOpacity={0.7}>
                 <Text style={styles.modalBtnCancel}>{t('common.cancel')}</Text>
               </TouchableOpacity>
-              <TouchableOpacity style={[styles.modalBtn, styles.modalBtnSave]} onPress={handleSaveName} activeOpacity={0.7}>
-                <Text style={styles.modalBtnSaveText}>{t('common.save')}</Text>
+              <TouchableOpacity
+                style={[styles.modalBtn, styles.modalBtnSave, isSaving && styles.modalBtnDisabled]}
+                onPress={handleSaveProfile}
+                activeOpacity={0.7}
+                disabled={isSaving}
+              >
+                <Text style={styles.modalBtnSaveText}>{isSaving ? t('common.loading') : t('common.save')}</Text>
               </TouchableOpacity>
             </View>
           </View>
@@ -434,5 +543,29 @@ const styles = StyleSheet.create({
     color: COLORS.textPrimary,
     fontSize: FONT.sizes.md,
     fontWeight: FONT.weights.semibold,
+  },
+  modalBtnDisabled: { opacity: 0.5 },
+  modalLabel: {
+    color: COLORS.textMuted,
+    fontSize: FONT.sizes.xs,
+    fontWeight: FONT.weights.semibold,
+    letterSpacing: 0.5,
+    marginBottom: 4,
+  },
+  modalInputRow: { position: 'relative', marginBottom: SPACING.md },
+  modalInputFlex: { marginBottom: 0 },
+  modalInputDisabled: { opacity: 0.4 },
+  modalSpinner: { position: 'absolute', right: SPACING.md, top: 10 },
+  modalCooldown: {
+    color: COLORS.textMuted,
+    fontSize: FONT.sizes.xs,
+    marginTop: -SPACING.sm,
+    marginBottom: SPACING.md,
+  },
+  modalStatusText: {
+    fontSize: FONT.sizes.xs,
+    fontWeight: FONT.weights.medium,
+    marginTop: -SPACING.sm,
+    marginBottom: SPACING.md,
   },
 });
