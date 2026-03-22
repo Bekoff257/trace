@@ -109,13 +109,13 @@ export const useFriendsStore = create<FriendsState>((set, get) => ({
       if (!profile) return 'User not found. Ask them to share their @username.';
       if (profile.user_id === userId) return 'You can\'t add yourself as a friend.';
 
-      const { error } = await supabase.from('friendships').insert({
+      const { error: insertError } = await supabase.from('friendships').insert({
         user_id: userId,
         friend_id: profile.user_id,
         status: 'pending',
       });
 
-      if (error) return error.message;
+      if (insertError) return insertError.message;
       return null;
     } catch (e: any) {
       return e?.message ?? 'Unknown error';
