@@ -21,6 +21,8 @@
         "NSLocationAlwaysUsageDescription": "Trace needs always-on access to record your location history in the background.",
         "UIBackgroundModes": [
           "location",
+          "fetch",
+          "location",
           "fetch"
         ]
       }
@@ -35,6 +37,21 @@
       },
       "googleServicesFile": "./google-services.json",
       "permissions": [
+        "ACCESS_COARSE_LOCATION",
+        "ACCESS_FINE_LOCATION",
+        "ACCESS_BACKGROUND_LOCATION",
+        "FOREGROUND_SERVICE",
+        "FOREGROUND_SERVICE_LOCATION",
+        "RECEIVE_BOOT_COMPLETED",
+        "NOTIFICATIONS",
+        "android.permission.ACCESS_COARSE_LOCATION",
+        "android.permission.ACCESS_FINE_LOCATION",
+        "android.permission.ACCESS_BACKGROUND_LOCATION",
+        "android.permission.FOREGROUND_SERVICE",
+        "android.permission.FOREGROUND_SERVICE_LOCATION",
+        "android.permission.RECEIVE_BOOT_COMPLETED",
+        "android.permission.NOTIFICATIONS",
+        "android.permission.POST_NOTIFICATIONS",
         "ACCESS_COARSE_LOCATION",
         "ACCESS_FINE_LOCATION",
         "ACCESS_BACKGROUND_LOCATION",
@@ -95,6 +112,12 @@
         "projectId": "e345294c-7ec9-4a5f-8003-7ad641d3c4e4"
       }
     },
-    "owner": "behzod"
+    "owner": "behzod",
+    "runtimeVersion": {
+      "policy": "appVersion"
+    },
+    "updates": {
+      "url": "https://u.expo.dev/e345294c-7ec9-4a5f-8003-7ad641d3c4e4"
+    }
   }
 }
