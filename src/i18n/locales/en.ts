@@ -75,11 +75,18 @@ export default {
   // ── History screen ─────────────────────────────────────────────────────────
   history: {
     title: 'History',
+    calendarTitle: 'Calendar',
     sectionLabel: 'PAST JOURNEYS',
+    today: 'Today',
     noData: 'No history yet',
-    noDataSub: 'Your past days will appear here.',
+    noDataSub: 'Start tracking to see your daily history here.',
     places: 'places',
     km: 'km',
+    miles: 'miles',
+    steps: 'steps',
+    active: 'active',
+    recentDays: 'RECENT DAYS',
+    miUnit: 'mi',
   },
 
   // ── Profile screen ─────────────────────────────────────────────────────────
@@ -152,8 +159,8 @@ export default {
 
   // ── Auth screens ───────────────────────────────────────────────────────────
   onboarding: {
-    title: 'Your life,\nmapped.',
-    subtitle: 'Trace automatically builds a beautiful timeline of everywhere you go.',
+    title: 'Your life,\nvisualized.',
+    subtitle: 'Watch your daily paths turn into\nstunning, glowing stories over time.',
     feature1Title: 'Automatic tracking',
     feature1Sub: 'Runs silently in the background',
     feature2Title: 'Private by default',
@@ -163,6 +170,12 @@ export default {
     getStarted: 'Get Started',
     enableLocation: 'Enable Location',
     locationRequired: 'Location access is required to track your journey.',
+    locationData: 'LOCATION DATA',
+    alwaysAllow: 'Always Allow',
+    privacyDescBefore: 'We track locally. Your data ',
+    privacyNever: 'never',
+    privacyDescAfter: ' leaves your device.',
+    skip: 'SKIP',
   },
   login: {
     title: 'Welcome back',

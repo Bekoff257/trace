@@ -68,11 +68,18 @@ export default {
 
   history: {
     title: 'Kunlar',
+    calendarTitle: 'Taqvim',
     sectionLabel: 'O\'TGAN SAYOHATLAR',
+    today: 'Bugun',
     noData: 'Tarix yo\'q',
-    noDataSub: 'O\'tgan kunlar bu yerda ko\'rinadi.',
+    noDataSub: 'Tarixni ko\'rish uchun kuzatishni boshlang.',
     places: 'joy',
     km: 'km',
+    miles: 'mil',
+    steps: 'qadam',
+    active: 'faol',
+    recentDays: 'SO\'NGGI KUNLAR',
+    miUnit: 'km',
   },
 
   profile: {
@@ -142,8 +149,8 @@ export default {
   },
 
   onboarding: {
-    title: 'Hayotingiz,\nxaritada.',
-    subtitle: 'Trace siz borgan barcha joylarning chiroyli xronikasini avtomatik tuzadi.',
+    title: 'Hayotingiz,\nko\'rinishda.',
+    subtitle: 'Kunlik yo\'llaringiz vaqt o\'tishi bilan\nchiroyli porlayotgan hikoyalarga aylanadi.',
     feature1Title: 'Avtomatik kuzatish',
     feature1Sub: 'Fonda jimgina ishlaydi',
     feature2Title: 'Standart maxfiylik',
@@ -153,6 +160,12 @@ export default {
     getStarted: 'Boshlash',
     enableLocation: 'Joylashuvga ruxsat berish',
     locationRequired: 'Sayohatni kuzatish uchun joylashuv kerak.',
+    locationData: 'JOYLASHUV MA\'LUMOTI',
+    alwaysAllow: 'Doimo ruxsat',
+    privacyDescBefore: 'Ma\'lumotlar mahalliy saqlanadi va qurilmangizni ',
+    privacyNever: 'hech qachon',
+    privacyDescAfter: ' tark etmaydi.',
+    skip: 'O\'TKAZIB YUBORISH',
   },
   login: {
     title: 'Xush kelibsiz',

@@ -1,4 +1,5 @@
 import { useEffect, useRef } from 'react';
+import { useTranslation } from 'react-i18next';
 import {
   View,
   Text,
@@ -36,6 +37,7 @@ const DOTS = [
 ];
 
 export default function OnboardingScreen() {
+  const { t } = useTranslation();
   const fadeAnim = useRef(new Animated.Value(0)).current;
   const slideAnim = useRef(new Animated.Value(40)).current;
   const cardSlide = useRef(new Animated.Value(60)).current;
@@ -106,7 +108,7 @@ export default function OnboardingScreen() {
       <SafeAreaView style={styles.safe}>
         {/* Skip button */}
         <TouchableOpacity onPress={handleSkip} style={styles.skipBtn}>
-          <Text style={styles.skipText}>SKIP</Text>
+          <Text style={styles.skipText}>{t('onboarding.skip')}</Text>
         </TouchableOpacity>
 
         {/* Center content */}
@@ -126,17 +128,11 @@ export default function OnboardingScreen() {
             </View>
           </View>
 
-          <SectionLabel text="LOCATION DATA" color={COLORS.accent} style={styles.pill} />
+          <SectionLabel text={t('onboarding.locationData')} color={COLORS.accent} style={styles.pill} />
 
-          <Text style={styles.headline}>
-            Your life,{'\n'}
-            <Text style={styles.headlineAccent}>visualized.</Text>
-          </Text>
+          <Text style={styles.headline}>{t('onboarding.title')}</Text>
 
-          <Text style={styles.subtitle}>
-            Watch your daily paths turn into{'\n'}
-            stunning, glowing stories over time.
-          </Text>
+          <Text style={styles.subtitle}>{t('onboarding.subtitle')}</Text>
         </Animated.View>
 
         {/* Bottom card */}
@@ -154,10 +150,11 @@ export default function OnboardingScreen() {
                 </LinearGradient>
               </View>
               <View style={styles.privacyText}>
-                <Text style={styles.privacyTitle}>Always Allow</Text>
+                <Text style={styles.privacyTitle}>{t('onboarding.alwaysAllow')}</Text>
                 <Text style={styles.privacyDesc}>
-                  We track locally. Your data{' '}
-                  <Text style={styles.privacyNever}>never</Text> leaves your device.
+                  {t('onboarding.privacyDescBefore')}
+                  <Text style={styles.privacyNever}>{t('onboarding.privacyNever')}</Text>
+                  {t('onboarding.privacyDescAfter')}
                 </Text>
               </View>
             </View>
@@ -175,7 +172,7 @@ export default function OnboardingScreen() {
               end={{ x: 1, y: 0 }}
               style={styles.ctaBtn}
             >
-              <Text style={styles.ctaText}>Enable Location</Text>
+              <Text style={styles.ctaText}>{t('onboarding.enableLocation')}</Text>
               <Ionicons name="arrow-forward" size={18} color={COLORS.textPrimary} />
             </LinearGradient>
           </TouchableOpacity>

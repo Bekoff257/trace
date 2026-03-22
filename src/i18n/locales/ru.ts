@@ -68,11 +68,18 @@ export default {
 
   history: {
     title: 'История',
+    calendarTitle: 'Календарь',
     sectionLabel: 'ПРОШЛЫЕ МАРШРУТЫ',
+    today: 'Сегодня',
     noData: 'История пуста',
-    noDataSub: 'Здесь появятся ваши прошлые дни.',
+    noDataSub: 'Начните отслеживание, чтобы видеть историю здесь.',
     places: 'мест',
     km: 'км',
+    miles: 'миль',
+    steps: 'шагов',
+    active: 'актив.',
+    recentDays: 'ПОСЛЕДНИЕ ДНИ',
+    miUnit: 'км',
   },
 
   profile: {
@@ -142,8 +149,8 @@ export default {
   },
 
   onboarding: {
-    title: 'Ваша жизнь,\nна карте.',
-    subtitle: 'Trace автоматически строит красивую хронику всех мест, где вы бываете.',
+    title: 'Ваша жизнь,\nвизуализирована.',
+    subtitle: 'Наблюдайте, как ежедневные маршруты\nпревращаются в светящиеся истории.',
     feature1Title: 'Автоматическое отслеживание',
     feature1Sub: 'Работает в фоновом режиме',
     feature2Title: 'Конфиденциально по умолчанию',
@@ -153,6 +160,12 @@ export default {
     getStarted: 'Начать',
     enableLocation: 'Разрешить геолокацию',
     locationRequired: 'Для отслеживания необходим доступ к геолокации.',
+    locationData: 'ДАННЫЕ О МЕСТОПОЛОЖЕНИИ',
+    alwaysAllow: 'Всегда разрешать',
+    privacyDescBefore: 'Данные хранятся локально и ',
+    privacyNever: 'никогда',
+    privacyDescAfter: ' не покидают устройство.',
+    skip: 'ПРОПУСТИТЬ',
   },
   login: {
     title: 'С возвращением',

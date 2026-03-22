@@ -35,7 +35,10 @@ TaskManager.defineTask(TRACKING.BACKGROUND_TASK_NAME, async ({ data, error }: an
     for (const loc of locations) {
       const point = locationObjectToPoint(loc, _currentUserId);
       if (!point) continue;
+      if (isTooClose(point.lat, point.lng, point.speed)) continue;
       try {
+        _lastRecordedLat = point.lat;
+        _lastRecordedLng = point.lng;
         await insertLocationPoint(point);
         await processNewPoint(point);
         useLocationStore.getState().addPoint(point);
@@ -55,6 +58,26 @@ TaskManager.defineTask(TRACKING.BACKGROUND_TASK_NAME, async ({ data, error }: an
 
 let _currentUserId = 'anonymous';
 let _locationSubscription: Location.LocationSubscription | null = null;
+let _lastRecordedLat: number | null = null;
+let _lastRecordedLng: number | null = null;
+
+function haversineMeters(lat1: number, lng1: number, lat2: number, lng2: number): number {
+  const R = 6371000;
+  const dLat = (lat2 - lat1) * Math.PI / 180;
+  const dLng = (lng2 - lng1) * Math.PI / 180;
+  const a = Math.sin(dLat / 2) ** 2 +
+    Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) * Math.sin(dLng / 2) ** 2;
+  return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+}
+
+/** Returns true if the point should be skipped (user hasn't moved enough). */
+function isTooClose(lat: number, lng: number, speed: number): boolean {
+  if (_lastRecordedLat == null || _lastRecordedLng == null) return false;
+  // Only apply the filter when clearly not moving
+  if (speed >= TRACKING.MOVING_SPEED_THRESHOLD_MS) return false;
+  const dist = haversineMeters(_lastRecordedLat, _lastRecordedLng, lat, lng);
+  return dist < TRACKING.MEDIUM_MIN_DISTANCE_M;
+}
 
 export function setTrackingUserId(userId: string): void {
   _currentUserId = userId;
@@ -159,6 +182,9 @@ async function startForegroundTracking(): Promise<void> {
         if ((loc.coords.accuracy ?? 999) > 30) return;
         const point = locationObjectToPoint(loc, _currentUserId);
         if (!point) return;
+        if (isTooClose(point.lat, point.lng, point.speed)) return;
+        _lastRecordedLat = point.lat;
+        _lastRecordedLng = point.lng;
         await insertLocationPoint(point);
         await processNewPoint(point);
         useLocationStore.getState().addPoint(point);
@@ -173,6 +199,8 @@ async function startForegroundTracking(): Promise<void> {
 async function stopForegroundTracking(): Promise<void> {
   _locationSubscription?.remove();
   _locationSubscription = null;
+  _lastRecordedLat = null;
+  _lastRecordedLng = null;
 }
 
 // ─── Background tracking ──────────────────────────────────────────────────────

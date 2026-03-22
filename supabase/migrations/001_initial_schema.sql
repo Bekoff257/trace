@@ -83,7 +83,6 @@ create policy "Users can manage own sessions" on public.visit_sessions
   using (auth.uid() = user_id)
   with check (auth.uid() = user_id);
 
--- ─── Daily Summaries ────────────────────────────────────────────────────────────
 create table public.daily_summaries (
   id                uuid primary key default gen_random_uuid(),
   user_id           uuid not null references public.users(id) on delete cascade,

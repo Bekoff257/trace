@@ -99,12 +99,13 @@ export const useFriendsStore = create<FriendsState>((set, get) => ({
     try {
       // Look up friend's user_id by username (strip leading @ if present)
       const username = friendEmail.trim().replace(/^@/, '').toLowerCase();
-      const { data: profile } = await supabase
+      const { data: profile, error } = await supabase
         .from('user_profiles')
         .select('user_id, display_name')
         .eq('username', username)
         .maybeSingle();
 
+      if (error) return `Search failed: ${error.message}`;
       if (!profile) return 'User not found. Ask them to share their @username.';
       if (profile.user_id === userId) return 'You can\'t add yourself as a friend.';
 

@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity, ActivityIndicator } from 'react-native';
 import { router } from 'expo-router';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -9,8 +10,6 @@ import { COLORS, FONT, SPACING, RADIUS, GRADIENTS } from '@constants/theme';
 import SectionLabel from '@components/ui/SectionLabel';
 import { useMonthHistory } from '@hooks/useMonthHistory';
 
-const DAY_LABELS = ['M', 'T', 'W', 'T', 'F', 'S', 'S'];
-
 // Map a distance (meters) to a dot intensity style
 function dotIntensity(distanceM: number): 'high' | 'mid' | 'low' {
   if (distanceM >= 6000) return 'high';
@@ -19,15 +18,21 @@ function dotIntensity(distanceM: number): 'high' | 'mid' | 'low' {
 }
 
 export default function HistoryScreen() {
+  const { t, i18n } = useTranslation();
   const { days, isLoading, year, month, goToPrevMonth, goToNextMonth } = useMonthHistory();
   const [selectedDate, setSelectedDate] = useState<string | null>(
     new Date().toISOString().slice(0, 10)
   );
 
-  const monthName = new Date(year, month).toLocaleDateString('en-US', {
+  const monthName = new Date(year, month).toLocaleDateString(i18n.language, {
     month: 'long',
     year: 'numeric',
   });
+
+  // Locale-aware short day labels starting Monday
+  const dayLabels = Array.from({ length: 7 }, (_, i) =>
+    new Date(2024, 0, 1 + i).toLocaleDateString(i18n.language, { weekday: 'narrow' })
+  );
 
   // Calendar blanks: week starts Monday (0=Mon…6=Sun)
   const firstDow = new Date(year, month, 1).getDay(); // 0=Sun
@@ -51,14 +56,14 @@ export default function HistoryScreen() {
           {/* Header */}
           <View style={styles.header}>
             <View>
-              <SectionLabel text="HISTORY" color={COLORS.accent} />
-              <Text style={styles.title}>Calendar</Text>
+              <SectionLabel text={t('history.sectionLabel')} color={COLORS.accent} />
+              <Text style={styles.title}>{t('history.calendarTitle')}</Text>
             </View>
             <TouchableOpacity
               style={styles.todayBtn}
               onPress={() => setSelectedDate(new Date().toISOString().slice(0, 10))}
             >
-              <Text style={styles.todayBtnText}>Today</Text>
+              <Text style={styles.todayBtnText}>{t('history.today')}</Text>
             </TouchableOpacity>
           </View>
 
@@ -80,7 +85,7 @@ export default function HistoryScreen() {
 
             {/* Day headers */}
             <View style={styles.dayHeaders}>
-              {DAY_LABELS.map((d, i) => (
+              {dayLabels.map((d, i) => (
                 <Text key={i} style={styles.dayHeader}>{d}</Text>
               ))}
             </View>
@@ -150,23 +155,23 @@ export default function HistoryScreen() {
                     <Text style={styles.dayPreviewValue}>
                       {(selectedDay.summary.totalDistanceM / 1609.34).toFixed(1)}
                     </Text>
-                    <Text style={styles.dayPreviewLabel}>miles</Text>
+                    <Text style={styles.dayPreviewLabel}>{t('history.miles')}</Text>
                   </View>
                   <View style={styles.dayPreviewStat}>
                     <Text style={styles.dayPreviewValue}>{selectedDay.summary.placesVisited}</Text>
-                    <Text style={styles.dayPreviewLabel}>places</Text>
+                    <Text style={styles.dayPreviewLabel}>{t('history.places')}</Text>
                   </View>
                   <View style={styles.dayPreviewStat}>
                     <Text style={styles.dayPreviewValue}>
                       {(selectedDay.summary.stepsEstimated / 1000).toFixed(1)}k
                     </Text>
-                    <Text style={styles.dayPreviewLabel}>steps</Text>
+                    <Text style={styles.dayPreviewLabel}>{t('history.steps')}</Text>
                   </View>
                   <View style={styles.dayPreviewStat}>
                     <Text style={styles.dayPreviewValue}>
                       {Math.floor(selectedDay.summary.timeOutsideMin / 60)}h
                     </Text>
-                    <Text style={styles.dayPreviewLabel}>active</Text>
+                    <Text style={styles.dayPreviewLabel}>{t('history.active')}</Text>
                   </View>
                 </View>
               </View>
@@ -174,22 +179,22 @@ export default function HistoryScreen() {
           </View>
 
           {/* Recent days list */}
-          <Text style={styles.recentTitle}>RECENT DAYS</Text>
+          <Text style={styles.recentTitle}>{t('history.recentDays')}</Text>
           {recentDays.length === 0 && !isLoading ? (
             <View style={styles.emptyRecent}>
               <Ionicons name="calendar-outline" size={32} color={COLORS.textMuted} />
-              <Text style={styles.emptyText}>No history yet</Text>
-              <Text style={styles.emptySubText}>Start tracking to see your daily history here.</Text>
+              <Text style={styles.emptyText}>{t('history.noData')}</Text>
+              <Text style={styles.emptySubText}>{t('history.noDataSub')}</Text>
             </View>
           ) : (
             recentDays.map((day) => {
               const distMi = (day.summary!.totalDistanceM / 1609.34).toFixed(1);
               const stepsK = (day.summary!.stepsEstimated / 1000).toFixed(1);
               const places = day.summary!.placesVisited;
-              const dayLabel = new Date(day.date).toLocaleDateString('en-US', { weekday: 'long' });
+              const dayLabel = new Date(day.date).toLocaleDateString(i18n.language, { weekday: 'long' });
               const dateLabel = day.isToday
-                ? 'Today'
-                : new Date(day.date + 'T00:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+                ? t('history.today')
+                : new Date(day.date + 'T00:00:00').toLocaleDateString(i18n.language, { month: 'short', day: 'numeric' });
 
               return (
                 <TouchableOpacity
@@ -206,8 +211,8 @@ export default function HistoryScreen() {
                       <Text style={styles.dayRowLabel}>{dayLabel}</Text>
                     </View>
                     <View style={styles.dayRowStats}>
-                      <Text style={styles.dayRowDist}>{distMi} mi</Text>
-                      <Text style={styles.dayRowSub}>{places} places · {stepsK}k steps</Text>
+                      <Text style={styles.dayRowDist}>{distMi} {t('history.miUnit')}</Text>
+                      <Text style={styles.dayRowSub}>{places} {t('history.places')} · {stepsK}k {t('history.steps')}</Text>
                     </View>
                     <Ionicons name="chevron-forward" size={16} color={COLORS.textMuted} />
                   </View>
