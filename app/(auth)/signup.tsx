@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import {
   View,
   Text,
@@ -18,6 +19,7 @@ import GlowButton from '@components/ui/GlowButton';
 import { COLORS, GRADIENTS, SPACING, FONT, RADIUS } from '@constants/theme';
 
 export default function SignupScreen() {
+  const { t } = useTranslation();
   const [displayName, setDisplayName] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -33,12 +35,12 @@ export default function SignupScreen() {
 
   const validate = (): boolean => {
     const errors: typeof fieldErrors = {};
-    if (!displayName.trim()) errors.displayName = 'Name is required';
-    if (!email.trim()) errors.email = 'Email is required';
-    else if (!/\S+@\S+\.\S+/.test(email)) errors.email = 'Enter a valid email';
-    if (!password) errors.password = 'Password is required';
-    else if (password.length < 6) errors.password = 'Minimum 6 characters';
-    if (password !== confirmPassword) errors.confirmPassword = 'Passwords do not match';
+    if (!displayName.trim()) errors.displayName = t('signup.nameRequired');
+    if (!email.trim()) errors.email = t('signup.emailRequired');
+    else if (!/\S+@\S+\.\S+/.test(email)) errors.email = t('signup.emailInvalid');
+    if (!password) errors.password = t('signup.passwordRequired');
+    else if (password.length < 6) errors.password = t('signup.passwordMin');
+    if (password !== confirmPassword) errors.confirmPassword = t('signup.passwordMismatch');
     setFieldErrors(errors);
     return Object.keys(errors).length === 0;
   };
@@ -65,14 +67,12 @@ export default function SignupScreen() {
               <Ionicons name="mail-outline" size={32} color={COLORS.textPrimary} />
             </LinearGradient>
           </View>
-          <Text style={styles.confirmTitle}>Check your email</Text>
+          <Text style={styles.confirmTitle}>{t('signup.checkEmail')}</Text>
           <Text style={styles.confirmBody}>
-            We sent a confirmation link to{'\n'}
-            <Text style={styles.confirmEmail}>{email.trim()}</Text>
-            {'\n\n'}Click the link in the email to activate your account, then come back and sign in.
+            {t('signup.confirmSent', { email: email.trim() })}
           </Text>
           <GlowButton
-            label="Go to Sign In"
+            label={t('signup.backToLogin')}
             onPress={() => {
               clearError();
               router.replace('/(auth)/login');
@@ -117,8 +117,8 @@ export default function SignupScreen() {
                 <Text style={styles.logoText}>L</Text>
               </LinearGradient>
             </View>
-            <Text style={styles.title}>Create account</Text>
-            <Text style={styles.subtitle}>Start tracking your daily story</Text>
+            <Text style={styles.title}>{t('signup.title')}</Text>
+            <Text style={styles.subtitle}>{t('signup.subtitle')}</Text>
           </View>
 
           {/* Form */}
@@ -130,40 +130,40 @@ export default function SignupScreen() {
             ) : null}
 
             <GlassInput
-              label="Full Name"
+              label={t('signup.name')}
               placeholder="Alex Johnson"
               value={displayName}
-              onChangeText={(t) => { setDisplayName(t); clearError(); }}
+              onChangeText={(v) => { setDisplayName(v); clearError(); }}
               autoCapitalize="words"
               error={fieldErrors.displayName}
               returnKeyType="next"
             />
 
             <GlassInput
-              label="Email"
+              label={t('signup.email')}
               placeholder="you@example.com"
               value={email}
-              onChangeText={(t) => { setEmail(t); clearError(); }}
+              onChangeText={(v) => { setEmail(v); clearError(); }}
               keyboardType="email-address"
               error={fieldErrors.email}
               returnKeyType="next"
             />
 
             <GlassInput
-              label="Password"
+              label={t('signup.password')}
               placeholder="••••••••"
               value={password}
-              onChangeText={(t) => { setPassword(t); clearError(); }}
+              onChangeText={(v) => { setPassword(v); clearError(); }}
               isPassword
               error={fieldErrors.password}
               returnKeyType="next"
             />
 
             <GlassInput
-              label="Confirm Password"
+              label={t('signup.confirmPassword')}
               placeholder="••••••••"
               value={confirmPassword}
-              onChangeText={(t) => { setConfirmPassword(t); clearError(); }}
+              onChangeText={(v) => { setConfirmPassword(v); clearError(); }}
               isPassword
               error={fieldErrors.confirmPassword}
               returnKeyType="done"
@@ -178,7 +178,7 @@ export default function SignupScreen() {
             </Text>
 
             <GlowButton
-              label="Create Account"
+              label={t('signup.createAccount')}
               onPress={handleSignup}
               isLoading={isLoading}
               style={styles.signUpBtn}
@@ -192,7 +192,7 @@ export default function SignupScreen() {
             </View>
 
             <GlowButton
-              label="Continue with Google"
+              label={t('signup.continueGoogle')}
               onPress={handleGoogle}
               variant="google"
               isLoading={isLoading}
@@ -201,9 +201,9 @@ export default function SignupScreen() {
 
           {/* Footer */}
           <View style={styles.footer}>
-            <Text style={styles.footerText}>Already have an account? </Text>
+            <Text style={styles.footerText}>{t('signup.hasAccount')} </Text>
             <TouchableOpacity onPress={() => router.replace('/(auth)/login')}>
-              <Text style={styles.footerLink}>Sign in</Text>
+              <Text style={styles.footerLink}>{t('signup.signIn')}</Text>
             </TouchableOpacity>
           </View>
         </ScrollView>

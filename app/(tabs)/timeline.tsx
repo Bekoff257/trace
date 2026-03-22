@@ -1,4 +1,5 @@
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Share } from 'react-native';
+import { useTranslation } from 'react-i18next';
 import { LinearGradient } from 'expo-linear-gradient';
 import { BlurView } from 'expo-blur';
 import { Ionicons } from '@expo/vector-icons';
@@ -18,7 +19,8 @@ function formatDuration(minutes: number): string {
 }
 
 export default function TimelineScreen() {
-  const today = new Date().toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' });
+  const { t, i18n } = useTranslation();
+  const today = new Date().toLocaleDateString(i18n.language, { weekday: 'long', month: 'long', day: 'numeric' });
   const { sessions } = useTimeline();
   const { summary, distanceMi } = useDailySummary();
 
@@ -39,12 +41,12 @@ export default function TimelineScreen() {
 
   async function handleShare() {
     const lines = sessions.map((s) => {
-      const time = new Date(s.startedAt).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' });
+      const time = new Date(s.startedAt).toLocaleTimeString(i18n.language, { hour: 'numeric', minute: '2-digit' });
       return `${time} – ${s.placeName}${s.durationMin ? ` (${s.durationMin}m)` : ''}`;
     });
     await Share.share({
-      title: `My timeline for ${today}`,
-      message: [`Timeline for ${today}`, '', ...lines].join('\n'),
+      title: t('timeline.shareTitle', { date: today }),
+      message: [t('timeline.shareMessage', { date: today }), '', ...lines].join('\n'),
     }).catch(() => {});
   }
 
@@ -58,8 +60,8 @@ export default function TimelineScreen() {
           {/* ── Header ── */}
           <View style={styles.header}>
             <View>
-              <SectionLabel text="TODAY'S JOURNEY" color={COLORS.accent} />
-              <Text style={styles.title}>Timeline</Text>
+              <SectionLabel text={t('timeline.sectionLabel')} color={COLORS.accent} />
+              <Text style={styles.title}>{t('timeline.title')}</Text>
               <Text style={styles.dateLabel}>{today}</Text>
             </View>
             <View style={styles.headerActions}>
@@ -97,22 +99,22 @@ export default function TimelineScreen() {
 
             <View style={styles.summaryItem}>
               <Text style={styles.summaryValue}>{sessions.length}</Text>
-              <Text style={styles.summaryLabel}>Places</Text>
+              <Text style={styles.summaryLabel}>{t('timeline.places')}</Text>
             </View>
             <View style={styles.summaryDivider} />
             <View style={styles.summaryItem}>
               <Text style={styles.summaryValue}>{distLabel}</Text>
-              <Text style={styles.summaryLabel}>Distance</Text>
+              <Text style={styles.summaryLabel}>{t('timeline.distance')}</Text>
             </View>
             <View style={styles.summaryDivider} />
             <View style={styles.summaryItem}>
               <Text style={styles.summaryValue}>{activeLabel}</Text>
-              <Text style={styles.summaryLabel}>Outside</Text>
+              <Text style={styles.summaryLabel}>{t('timeline.outside')}</Text>
             </View>
             <View style={styles.summaryDivider} />
             <View style={styles.summaryItem}>
               <Text style={styles.summaryValue}>{stepsLabel}</Text>
-              <Text style={styles.summaryLabel}>Steps</Text>
+              <Text style={styles.summaryLabel}>{t('timeline.steps')}</Text>
             </View>
           </View>
 
@@ -125,10 +127,8 @@ export default function TimelineScreen() {
                     <Ionicons name="footsteps-outline" size={28} color="#fff" />
                   </LinearGradient>
                 </View>
-                <Text style={styles.emptyText}>Your day is just beginning</Text>
-                <Text style={styles.emptySubText}>
-                  Start moving and your journey will{'\n'}appear here automatically.
-                </Text>
+                <Text style={styles.emptyText}>{t('timeline.emptyTitle')}</Text>
+                <Text style={styles.emptySubText}>{t('timeline.emptySubtitle')}</Text>
               </View>
             ) : (
               sessions.map((session, i) => (
@@ -145,9 +145,9 @@ export default function TimelineScreen() {
           {/* ── Activity by Hour ── */}
           <View style={styles.activitySection}>
             <View style={styles.sectionRow}>
-              <Text style={styles.sectionTitle}>ACTIVITY BY HOUR</Text>
+              <Text style={styles.sectionTitle}>{t('timeline.activityByHour')}</Text>
               <TouchableOpacity onPress={() => router.push('/insights')} activeOpacity={0.7}>
-                <Text style={styles.sectionLink}>Full insights →</Text>
+                <Text style={styles.sectionLink}>{t('common.fullInsights')}</Text>
               </TouchableOpacity>
             </View>
             <View style={styles.activityCard}>

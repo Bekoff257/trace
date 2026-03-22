@@ -69,6 +69,32 @@ export interface DailySummary {
   updatedAt: string;
 }
 
+// ─── Friends ──────────────────────────────────────────────────────────────────
+export type MovementStatus = 'stationary' | 'walking' | 'driving';
+
+export interface FriendLocation {
+  userId: string;
+  lat: number;
+  lng: number;
+  speed: number;
+  heading?: number;
+  batteryLevel?: number;   // 0–1
+  isCharging?: boolean;
+  updatedAt: string;
+  status: MovementStatus;
+}
+
+export interface FriendProfile {
+  userId: string;
+  displayName: string;
+  avatarUrl?: string;
+}
+
+export interface Friend extends FriendProfile {
+  location?: FriendLocation;
+  friendshipStatus: 'pending' | 'accepted';
+}
+
 // ─── Auth ─────────────────────────────────────────────────────────────────────
 export interface AuthSession {
   accessToken: string;

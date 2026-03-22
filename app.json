@@ -1,7 +1,7 @@
 {
   "expo": {
-    "name": "Location History Tracker",
-    "slug": "location-history-tracker",
+    "name": "Trace",
+    "slug": "trace",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
@@ -16,9 +16,9 @@
       "supportsTablet": false,
       "bundleIdentifier": "com.locationtracker.app",
       "infoPlist": {
-        "NSLocationAlwaysAndWhenInUseUsageDescription": "Location History Tracker needs access to your location to track your daily paths and build your timeline.",
-        "NSLocationWhenInUseUsageDescription": "Location History Tracker needs access to your location to track your daily paths.",
-        "NSLocationAlwaysUsageDescription": "Location History Tracker needs always-on access to record your location history in the background.",
+        "NSLocationAlwaysAndWhenInUseUsageDescription": "Trace needs access to your location to track your daily paths and build your timeline.",
+        "NSLocationWhenInUseUsageDescription": "Trace needs access to your location to track your daily paths.",
+        "NSLocationAlwaysUsageDescription": "Trace needs always-on access to record your location history in the background.",
         "UIBackgroundModes": [
           "location",
           "fetch"
@@ -33,6 +33,7 @@
         "monochromeImage": "./assets/android-icon-monochrome.png",
         "backgroundColor": "#0A0A0F"
       },
+      "googleServicesFile": "./google-services.json",
       "permissions": [
         "ACCESS_COARSE_LOCATION",
         "ACCESS_FINE_LOCATION",
@@ -40,12 +41,15 @@
         "FOREGROUND_SERVICE",
         "FOREGROUND_SERVICE_LOCATION",
         "RECEIVE_BOOT_COMPLETED",
+        "NOTIFICATIONS",
         "android.permission.ACCESS_COARSE_LOCATION",
         "android.permission.ACCESS_FINE_LOCATION",
         "android.permission.ACCESS_BACKGROUND_LOCATION",
         "android.permission.FOREGROUND_SERVICE",
         "android.permission.FOREGROUND_SERVICE_LOCATION",
-        "android.permission.RECEIVE_BOOT_COMPLETED"
+        "android.permission.RECEIVE_BOOT_COMPLETED",
+        "android.permission.NOTIFICATIONS",
+        "android.permission.POST_NOTIFICATIONS"
       ]
     },
     "web": {
@@ -59,9 +63,26 @@
       [
         "expo-location",
         {
-          "locationAlwaysAndWhenInUsePermission": "Allow Location History Tracker to use your location to build your daily timeline.",
+          "locationAlwaysAndWhenInUsePermission": "Allow Trace to use your location to build your daily timeline.",
           "isAndroidBackgroundLocationEnabled": true,
           "isAndroidForegroundServiceEnabled": true
+        }
+      ],
+      [
+        "expo-build-properties",
+        {
+          "android": {
+            "newArchEnabled": false
+          }
+        }
+      ],
+      "expo-image",
+      [
+        "expo-notifications",
+        {
+          "icon": "./assets/icon.png",
+          "color": "#5B7FFF",
+          "sounds": []
         }
       ]
     ],

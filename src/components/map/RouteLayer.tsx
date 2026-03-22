@@ -2,7 +2,7 @@
  * RouteLayer — renders the GPS route as MapLibre layers.
  * Ghost full route (dim) + visible animated slice (bright) + head dot.
  */
-import { ShapeSource, LineLayer, CircleLayer } from '@maplibre/maplibre-react-native';
+import { GeoJSONSource, Layer } from '@maplibre/maplibre-react-native';
 import { COLORS } from '@constants/theme';
 
 interface Coord {
@@ -43,74 +43,86 @@ export default function RouteLayer({ allCoords, visibleCoords }: RouteLayerProps
   return (
     <>
       {allCoords.length > 1 && (
-        <ShapeSource id="ghost-route" shape={toLine(allCoords)}>
-          <LineLayer
+        <GeoJSONSource id="ghost-route" data={toLine(allCoords)}>
+          <Layer
             id="ghost-line"
-            style={{
-              lineColor: 'rgba(91,127,255,0.18)',
-              lineWidth: 3,
-              lineCap: 'round',
-              lineJoin: 'round',
+            type="line"
+            paint={{
+              'line-color': 'rgba(91,127,255,0.18)',
+              'line-width': 3,
+            }}
+            layout={{
+              'line-cap': 'round',
+              'line-join': 'round',
             }}
           />
-        </ShapeSource>
+        </GeoJSONSource>
       )}
 
       {visibleCoords.length > 1 && (
-        <ShapeSource id="visible-route" shape={toLine(visibleCoords)}>
+        <GeoJSONSource id="visible-route" data={toLine(visibleCoords)}>
           {/* Wide soft glow behind the line */}
-          <LineLayer
+          <Layer
             id="visible-glow"
-            style={{
-              lineColor: COLORS.accent,
-              lineWidth: 14,
-              lineCap: 'round',
-              lineJoin: 'round',
-              lineOpacity: 0.18,
-              lineBlur: 6,
+            type="line"
+            paint={{
+              'line-color': COLORS.accent,
+              'line-width': 14,
+              'line-opacity': 0.18,
+              'line-blur': 6,
+            }}
+            layout={{
+              'line-cap': 'round',
+              'line-join': 'round',
             }}
           />
           {/* Bright core line */}
-          <LineLayer
+          <Layer
             id="visible-line"
-            style={{
-              lineColor: COLORS.accent,
-              lineWidth: 3.5,
-              lineCap: 'round',
-              lineJoin: 'round',
+            type="line"
+            paint={{
+              'line-color': COLORS.accent,
+              'line-width': 3.5,
+            }}
+            layout={{
+              'line-cap': 'round',
+              'line-join': 'round',
             }}
           />
-        </ShapeSource>
+        </GeoJSONSource>
       )}
 
       {head && (
-        <ShapeSource id="head-dot" shape={toPoint(head)}>
-          <CircleLayer
+        <GeoJSONSource id="head-dot" data={toPoint(head)}>
+          <Layer
             id="head-outer"
-            style={{
-              circleRadius: 14,
-              circleColor: COLORS.accent,
-              circleOpacity: 0.2,
+            type="circle"
+            paint={{
+              'circle-radius': 14,
+              'circle-color': COLORS.accent,
+              'circle-opacity': 0.2,
             }}
           />
-          <CircleLayer
+          <Layer
             id="head-mid"
-            style={{
-              circleRadius: 8,
-              circleColor: COLORS.accent,
-              circleOpacity: 0.5,
+            type="circle"
+            paint={{
+              'circle-radius': 8,
+              'circle-color': COLORS.accent,
+              'circle-opacity': 0.5,
             }}
           />
-          <CircleLayer
+          <Layer
             id="head-inner"
-            style={{
-              circleRadius: 5,
-              circleColor: '#ffffff',
-              circleStrokeWidth: 2,
-              circleStrokeColor: COLORS.accent,
+            type="circle"
+            paint={{
+              'circle-radius': 5,
+              'circle-color': '#ffffff',
+              'circle-stroke-width': 2,
+              'circle-stroke-color': COLORS.accent,
             }}
           />
-        </ShapeSource>
+        </GeoJSONSource>
       )}
     </>
   );

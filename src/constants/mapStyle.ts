@@ -1,9 +1,9 @@
 const KEY = process.env.EXPO_PUBLIC_MAPTILER_KEY ?? '';
 
-// MapTiler free tier — sign up at maptiler.com for a free key (100k requests/month)
+// MapTiler — style.json with key inlined so MapLibre Native can resolve all sources
 export const MAP_STYLE_URL = `https://api.maptiler.com/maps/dataviz-dark/style.json?key=${KEY}`;
 
-// Fallback: MapLibre's own dark demo style — no key required, works offline-ish
-export const MAP_STYLE_FALLBACK = 'https://tiles.openfreemap.org/styles/dark';
+// Fallback: CARTO dark matter — fully self-contained MapLibre GL style, no key needed
+export const MAP_STYLE_FALLBACK = 'https://basemaps.cartocdn.com/gl/dark-matter-gl-style/style.json';
 
 export const MAP_STYLE = KEY ? MAP_STYLE_URL : MAP_STYLE_FALLBACK;

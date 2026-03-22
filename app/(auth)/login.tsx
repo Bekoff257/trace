@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import {
   View,
   Text,
@@ -17,6 +18,7 @@ import GlowButton from '@components/ui/GlowButton';
 import { COLORS, GRADIENTS, SPACING, FONT, RADIUS } from '@constants/theme';
 
 export default function LoginScreen() {
+  const { t } = useTranslation();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [fieldErrors, setFieldErrors] = useState<{ email?: string; password?: string }>({});
@@ -25,10 +27,10 @@ export default function LoginScreen() {
 
   const validate = (): boolean => {
     const errors: typeof fieldErrors = {};
-    if (!email.trim()) errors.email = 'Email is required';
-    else if (!/\S+@\S+\.\S+/.test(email)) errors.email = 'Enter a valid email';
-    if (!password) errors.password = 'Password is required';
-    else if (password.length < 6) errors.password = 'Minimum 6 characters';
+    if (!email.trim()) errors.email = t('login.emailRequired');
+    else if (!/\S+@\S+\.\S+/.test(email)) errors.email = t('login.emailInvalid');
+    if (!password) errors.password = t('login.passwordRequired');
+    else if (password.length < 6) errors.password = t('login.passwordMin');
     setFieldErrors(errors);
     return Object.keys(errors).length === 0;
   };
@@ -70,8 +72,8 @@ export default function LoginScreen() {
                 <Text style={styles.logoText}>L</Text>
               </LinearGradient>
             </View>
-            <Text style={styles.title}>Welcome back</Text>
-            <Text style={styles.subtitle}>Sign in to continue your journey</Text>
+            <Text style={styles.title}>{t('login.title')}</Text>
+            <Text style={styles.subtitle}>{t('login.subtitle')}</Text>
           </View>
 
           {/* Form card */}
@@ -83,20 +85,20 @@ export default function LoginScreen() {
             ) : null}
 
             <GlassInput
-              label="Email"
+              label={t('login.email')}
               placeholder="you@example.com"
               value={email}
-              onChangeText={(t) => { setEmail(t); clearError(); }}
+              onChangeText={(v) => { setEmail(v); clearError(); }}
               keyboardType="email-address"
               error={fieldErrors.email}
               returnKeyType="next"
             />
 
             <GlassInput
-              label="Password"
+              label={t('login.password')}
               placeholder="••••••••"
               value={password}
-              onChangeText={(t) => { setPassword(t); clearError(); }}
+              onChangeText={(v) => { setPassword(v); clearError(); }}
               isPassword
               error={fieldErrors.password}
               returnKeyType="done"
@@ -108,7 +110,7 @@ export default function LoginScreen() {
             </TouchableOpacity>
 
             <GlowButton
-              label="Sign In"
+              label={t('login.signIn')}
               onPress={handleLogin}
               isLoading={isLoading}
               style={styles.signInBtn}
@@ -122,7 +124,7 @@ export default function LoginScreen() {
             </View>
 
             <GlowButton
-              label="Sign in with Google"
+              label={t('login.continueGoogle')}
               onPress={handleGoogle}
               variant="google"
               isLoading={isLoading}
@@ -131,9 +133,9 @@ export default function LoginScreen() {
 
           {/* Footer */}
           <View style={styles.footer}>
-            <Text style={styles.footerText}>Don't have an account? </Text>
+            <Text style={styles.footerText}>{t('login.noAccount')} </Text>
             <TouchableOpacity onPress={() => router.push('/(auth)/signup')}>
-              <Text style={styles.footerLink}>Sign up</Text>
+              <Text style={styles.footerLink}>{t('login.signUp')}</Text>
             </TouchableOpacity>
           </View>
         </ScrollView>

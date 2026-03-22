@@ -15,6 +15,7 @@ const supportsBackground = !(Platform.OS === 'android' && isExpoGo);
 import { TRACKING } from '@constants/config';
 import { insertLocationPoint } from './localDB';
 import { processNewPoint } from './visitDetector';
+import { publishLocation } from './friendLocationPublisher';
 import { useLocationStore } from '@stores/locationStore';
 import type { LocationPoint } from '@/types/index';
 
@@ -38,6 +39,7 @@ TaskManager.defineTask(TRACKING.BACKGROUND_TASK_NAME, async ({ data, error }: an
         await insertLocationPoint(point);
         await processNewPoint(point);
         useLocationStore.getState().addPoint(point);
+        publishLocation(point.lat, point.lng, point.speed, point.heading);
       } catch (dbErr: any) {
         console.warn('[LocationService] Background DB write skipped:', dbErr?.message ?? dbErr);
       }
@@ -124,6 +126,11 @@ export async function stopTracking(): Promise<void> {
   await stopBackgroundTracking();
 }
 
+export async function restartTracking(userId: string): Promise<void> {
+  await stopTracking();
+  await startTracking(userId);
+}
+
 export async function isTrackingActive(): Promise<boolean> {
   const hasTask = await TaskManager.isTaskRegisteredAsync(TRACKING.BACKGROUND_TASK_NAME);
   return hasTask || _locationSubscription !== null;
@@ -131,15 +138,21 @@ export async function isTrackingActive(): Promise<boolean> {
 
 // ─── Foreground tracking ──────────────────────────────────────────────────────
 
+function getTrackingParams() {
+  const mode = useLocationStore.getState().mode;
+  const isLowPower = mode === 'low_power';
+  return {
+    accuracy: isLowPower ? Location.Accuracy.Low : Location.Accuracy.Balanced,
+    distanceInterval: isLowPower ? TRACKING.LOW_POWER_MIN_DISTANCE_M : TRACKING.MEDIUM_MIN_DISTANCE_M,
+    timeInterval: isLowPower ? TRACKING.LOW_POWER_INTERVAL_MS : TRACKING.MEDIUM_INTERVAL_MS,
+  };
+}
+
 async function startForegroundTracking(): Promise<void> {
   if (_locationSubscription) return; // already running
 
   _locationSubscription = await Location.watchPositionAsync(
-    {
-      accuracy: Location.Accuracy.Balanced,
-      distanceInterval: TRACKING.MEDIUM_MIN_DISTANCE_M,
-      timeInterval: TRACKING.MEDIUM_INTERVAL_MS,
-    },
+    getTrackingParams(),
     async (loc) => {
       try {
         const point = locationObjectToPoint(loc, _currentUserId);
@@ -147,6 +160,7 @@ async function startForegroundTracking(): Promise<void> {
         await insertLocationPoint(point);
         await processNewPoint(point);
         useLocationStore.getState().addPoint(point);
+        publishLocation(point.lat, point.lng, point.speed, point.heading);
       } catch (e: any) {
         if (!e?.message?.includes('forEach')) console.warn('[LocationService] Foreground fault:', e);
       }
@@ -166,9 +180,7 @@ async function startBackgroundTracking(): Promise<void> {
   if (isRegistered) return;
 
   await Location.startLocationUpdatesAsync(TRACKING.BACKGROUND_TASK_NAME, {
-    accuracy: Location.Accuracy.Balanced,
-    distanceInterval: TRACKING.MEDIUM_MIN_DISTANCE_M,
-    timeInterval: TRACKING.MEDIUM_INTERVAL_MS,
+    ...getTrackingParams(),
     // Android: keep service alive in notification
     foregroundService: Platform.OS === 'android'
       ? {

@@ -1,0 +1,214 @@
+export default {
+  // ── Common ─────────────────────────────────────────────────────────────────
+  common: {
+    ok: 'OK',
+    cancel: 'Cancel',
+    error: 'Error',
+    save: 'Save',
+    loading: 'Loading...',
+    seeAll: 'See all →',
+    fullInsights: 'Full insights →',
+    version: 'Trace v1.0.0',
+  },
+
+  // ── Tab bar ────────────────────────────────────────────────────────────────
+  tabs: {
+    home: 'Home',
+    timeline: 'Timeline',
+    map: 'Map',
+    history: 'History',
+    me: 'Me',
+  },
+
+  // ── Greeting ───────────────────────────────────────────────────────────────
+  greeting: {
+    morning: 'Good morning',
+    afternoon: 'Good afternoon',
+    evening: 'Good evening',
+  },
+
+  // ── Home screen ────────────────────────────────────────────────────────────
+  home: {
+    sectionLabel: 'TODAY\'S STATS',
+    todayDistance: 'TODAY\'S DISTANCE',
+    dailyGoal: '% of daily goal',
+    startMoving: 'Start moving',
+    timeOutside: 'TIME OUTSIDE',
+    places: 'PLACES',
+    stepsEst: 'STEPS (EST)',
+    activeMin: 'ACTIVE MIN',
+    recentPlaces: 'RECENT PLACES',
+    live: 'LIVE',
+    tapToStart: 'TAP TO START',
+    notifications: 'Notifications',
+    noNotifications: 'No new notifications.',
+    friends: 'Friends',
+  },
+
+  // ── Timeline screen ────────────────────────────────────────────────────────
+  timeline: {
+    sectionLabel: 'TODAY\'S JOURNEY',
+    title: 'Timeline',
+    places: 'Places',
+    distance: 'Distance',
+    outside: 'Outside',
+    steps: 'Steps',
+    emptyTitle: 'Your day is just beginning',
+    emptySubtitle: 'Start moving and your journey will\nappear here automatically.',
+    activityByHour: 'ACTIVITY BY HOUR',
+    shareTitle: 'My timeline for {{date}}',
+    shareMessage: 'Timeline for {{date}}',
+  },
+
+  // ── Map screen ─────────────────────────────────────────────────────────────
+  map: {
+    title: 'Map',
+    sectionLabel: 'LIVE MAP',
+    today: 'TODAY',
+    route: 'Route',
+    speed: 'Speed',
+    startTracking: 'Start Tracking',
+    stopTracking: 'Stop Tracking',
+    insights: 'Insights',
+  },
+
+  // ── History screen ─────────────────────────────────────────────────────────
+  history: {
+    title: 'History',
+    sectionLabel: 'PAST JOURNEYS',
+    noData: 'No history yet',
+    noDataSub: 'Your past days will appear here.',
+    places: 'places',
+    km: 'km',
+  },
+
+  // ── Profile screen ─────────────────────────────────────────────────────────
+  profile: {
+    sectionLabel: 'PROFILE',
+    title: 'Account',
+    editProfile: 'Edit Profile',
+    editProfileSoon: 'Profile editing coming soon.',
+    trackingGroup: 'TRACKING',
+    locationTracking: 'Location Tracking',
+    batterySaver: 'Battery Saver Mode',
+    syncFrequency: 'Sync Frequency',
+    syncValue: '15 min',
+    dataGroup: 'DATA',
+    privacyCenter: 'Privacy Center',
+    insights: 'Insights',
+    exportData: 'Export My Data',
+    accountGroup: 'ACCOUNT',
+    notifications: 'Notifications',
+    language: 'Language',
+    languageGroup: 'LANGUAGE',
+    signOut: 'Sign Out',
+    trackingError: 'Could not change tracking status.',
+    exportError: 'Could not export your data. Please try again.',
+    exportFailed: 'Export failed',
+    notificationsSettings: 'Go to Settings → Notifications → Trace to manage notifications.',
+    openSettings: 'Open Settings',
+  },
+
+  // ── Friends screen ─────────────────────────────────────────────────────────
+  friends: {
+    title: 'Friends',
+    sectionLabel: 'LOCATION SHARING',
+    addFriend: 'Add Friend',
+    addPlaceholder: 'Name or invite code',
+    add: 'Add',
+    inviteLink: 'Invite Link',
+    share: 'Share',
+    pendingRequests: 'PENDING REQUESTS',
+    accept: 'Accept',
+    myFriends: 'MY FRIENDS',
+    remove: 'Remove',
+    emptyFriends: 'No friends yet',
+    emptyFriendsSub: 'Add friends to see their location on the map.',
+    driving: 'Driving',
+    walking: 'Walking',
+    stationary: 'Stationary',
+    offline: 'Offline',
+    charging: 'Charging',
+    battery: '{{pct}}% battery',
+    sendError: 'Could not send friend request.',
+    acceptError: 'Could not accept request.',
+    removeError: 'Could not remove friend.',
+    copyError: 'Could not copy invite link.',
+    linkCopied: 'Invite link copied!',
+    requestSent: 'Friend request sent!',
+  },
+
+  // ── Auth screens ───────────────────────────────────────────────────────────
+  onboarding: {
+    title: 'Your life,\nmapped.',
+    subtitle: 'Trace automatically builds a beautiful timeline of everywhere you go.',
+    feature1Title: 'Automatic tracking',
+    feature1Sub: 'Runs silently in the background',
+    feature2Title: 'Private by default',
+    feature2Sub: 'Your data stays on your device',
+    feature3Title: 'Smart insights',
+    feature3Sub: 'Discover your daily patterns',
+    getStarted: 'Get Started',
+    enableLocation: 'Enable Location',
+    locationRequired: 'Location access is required to track your journey.',
+  },
+  login: {
+    title: 'Welcome back',
+    subtitle: 'Sign in to continue your journey',
+    email: 'Email',
+    password: 'Password',
+    signIn: 'Sign In',
+    continueGoogle: 'Continue with Google',
+    noAccount: 'No account?',
+    signUp: 'Sign up',
+    emailRequired: 'Email is required',
+    emailInvalid: 'Enter a valid email',
+    passwordRequired: 'Password is required',
+    passwordMin: 'Minimum 6 characters',
+  },
+  signup: {
+    title: 'Create account',
+    subtitle: 'Start your journey today',
+    name: 'Full Name',
+    email: 'Email',
+    password: 'Password',
+    confirmPassword: 'Confirm Password',
+    createAccount: 'Create Account',
+    continueGoogle: 'Continue with Google',
+    hasAccount: 'Have an account?',
+    signIn: 'Sign in',
+    nameRequired: 'Name is required',
+    emailRequired: 'Email is required',
+    emailInvalid: 'Enter a valid email',
+    passwordRequired: 'Password is required',
+    passwordMin: 'Minimum 6 characters',
+    passwordMismatch: 'Passwords do not match',
+    checkEmail: 'Check your email',
+    confirmSent: 'A confirmation link was sent to {{email}}. Open it to activate your account.',
+    openEmail: 'Open Email App',
+    backToLogin: 'Back to Login',
+  },
+
+  // ── Place detail ───────────────────────────────────────────────────────────
+  place: {
+    visits: 'Visits',
+    totalTime: 'Total time',
+    firstVisit: 'First visit',
+    avgDuration: 'Avg duration',
+    noVisits: 'No visits recorded yet.',
+    sectionLabel: 'PLACE DETAIL',
+  },
+
+  // ── Insights ───────────────────────────────────────────────────────────────
+  insights: {
+    title: 'Insights',
+    sectionLabel: 'YOUR PATTERNS',
+    noInsights: 'Keep tracking to unlock insights.',
+  },
+
+  // ── Privacy ────────────────────────────────────────────────────────────────
+  privacy: {
+    title: 'Privacy',
+    sectionLabel: 'PRIVACY CENTER',
+  },
+} as const;

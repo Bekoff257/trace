@@ -2,7 +2,7 @@
  * VisitMarker — renders visit session locations as MapLibre markers.
  */
 import { View, StyleSheet, TouchableOpacity } from 'react-native';
-import { PointAnnotation } from '@maplibre/maplibre-react-native';
+import { Marker } from '@maplibre/maplibre-react-native';
 import type { VisitSession } from '@/types/index';
 
 const CATEGORY_COLORS: Record<VisitSession['placeCategory'], string> = {
@@ -25,16 +25,17 @@ export default function VisitMarker({ session, onPress }: VisitMarkerProps) {
   const color = CATEGORY_COLORS[session.placeCategory] ?? '#606080';
 
   return (
-    <PointAnnotation
+    <Marker
       id={`visit-${session.id}`}
-      coordinate={[session.lng, session.lat]}
+      lngLat={[session.lng, session.lat]}
+      anchor="center"
     >
       <TouchableOpacity onPress={onPress} activeOpacity={0.8}>
         <View style={[styles.ring, { borderColor: color }]}>
           <View style={[styles.dot, { backgroundColor: color }]} />
         </View>
       </TouchableOpacity>
-    </PointAnnotation>
+    </Marker>
   );
 }
 

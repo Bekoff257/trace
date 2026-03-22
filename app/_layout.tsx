@@ -1,11 +1,11 @@
 // Must import locationService at startup to register the background task
 import '@services/locationService';
 import { cleanupUnsupportedBackgroundTask } from '@services/locationService';
+import { initI18n } from '@i18n/index';
 
-import MapLibreGL from '@maplibre/maplibre-react-native';
-MapLibreGL.setAccessToken(null);
+// MapLibre v11 does not require setAccessToken for open tile servers
 
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { View, ActivityIndicator, StyleSheet } from 'react-native';
 import { Stack, router, useSegments } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
@@ -15,6 +15,7 @@ import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { useAuthStore } from '@stores/authStore';
 import { useLocation } from '@hooks/useLocation';
 import { COLORS } from '@constants/theme';
+import { registerForPushNotifications, setupNotificationTapHandler } from '@services/notificationService';
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -25,6 +26,18 @@ const queryClient = new QueryClient({
 // Starts/stops GPS tracking whenever the auth session changes
 function LocationManager() {
   useLocation();
+  return null;
+}
+
+function NotificationManager() {
+  const { session } = useAuthStore();
+
+  useEffect(() => {
+    if (!session?.user?.id) return;
+    registerForPushNotifications(session.user.id);
+    return setupNotificationTapHandler();
+  }, [session?.user?.id]);
+
   return null;
 }
 
@@ -60,9 +73,14 @@ function AuthGate() {
 }
 
 export default function RootLayout() {
+  const [i18nReady, setI18nReady] = useState(false);
+
   useEffect(() => {
     cleanupUnsupportedBackgroundTask();
+    initI18n().finally(() => setI18nReady(true));
   }, []);
+
+  if (!i18nReady) return null;
 
   return (
     <GestureHandlerRootView style={{ flex: 1 }}>
@@ -79,11 +97,13 @@ export default function RootLayout() {
             <Stack.Screen name="(auth)" />
             <Stack.Screen name="(tabs)" />
             <Stack.Screen name="place/[id]" options={{ presentation: 'modal', animation: 'slide_from_bottom' }} />
+            <Stack.Screen name="friends" options={{ presentation: 'card', animation: 'slide_from_right' }} />
             <Stack.Screen name="insights" options={{ presentation: 'card', animation: 'slide_from_right' }} />
             <Stack.Screen name="privacy" options={{ presentation: 'card', animation: 'slide_from_right' }} />
           </Stack>
           <AuthGate />
           <LocationManager />
+          <NotificationManager />
         </QueryClientProvider>
       </SafeAreaProvider>
     </GestureHandlerRootView>

@@ -222,7 +222,7 @@ const styles = StyleSheet.create({
   title: {
     fontFamily: FONT.semiBold,
     fontSize: 17,
-    color: COLORS.text,
+    color: COLORS.textPrimary,
     textAlign: 'center',
     marginBottom: 6,
   },

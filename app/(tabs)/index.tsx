@@ -10,31 +10,36 @@ import {
   Modal,
 } from 'react-native';
 import { useAlert } from '@components/ui/CustomAlert';
-import { MapView, Camera, UserLocation, type CameraRef } from '@maplibre/maplibre-react-native';
+import { Map as MapView, Camera, UserLocation, type CameraRef } from '@maplibre/maplibre-react-native';
 import { MAP_STYLE } from '@constants/mapStyle';
 import { router } from 'expo-router';
 import { LinearGradient } from 'expo-linear-gradient';
 import { BlurView } from 'expo-blur';
 import { Ionicons } from '@expo/vector-icons';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useAuthStore } from '@stores/authStore';
+import { useTranslation } from 'react-i18next';
 import { useLocationStore } from '@stores/locationStore';
+import { useFriendsStore } from '@stores/friendsStore';
 import { useDailySummary } from '@hooks/useDailySummary';
 import { useTimeline } from '@hooks/useTimeline';
+import { useRealtimeFriends } from '@hooks/useRealtimeFriends';
+import { initPublisher, stopPublisher } from '@services/friendLocationPublisher';
 import { COLORS, FONT, SPACING, RADIUS, GRADIENTS, SHADOWS } from '@constants/theme';
 import SectionLabel from '@components/ui/SectionLabel';
 import LiveIndicator from '@components/ui/LiveIndicator';
 import ProgressBar from '@components/ui/ProgressBar';
 import RouteLayer from '@components/map/RouteLayer';
 import VisitMarker from '@components/map/VisitMarker';
+import FriendMarker from '@components/map/FriendMarker';
 
 const { width } = Dimensions.get('window');
 
-function getGreeting(): string {
+function getGreetingKey(): 'greeting.morning' | 'greeting.afternoon' | 'greeting.evening' {
   const h = new Date().getHours();
-  if (h < 12) return 'Good morning';
-  if (h < 18) return 'Good afternoon';
-  return 'Good evening';
+  if (h < 12) return 'greeting.morning';
+  if (h < 18) return 'greeting.afternoon';
+  return 'greeting.evening';
 }
 
 function formatDuration(minutes: number): string {
@@ -45,11 +50,38 @@ function formatDuration(minutes: number): string {
 export default function HomeScreen() {
   const { user } = useAuthStore();
   const { isTracking, currentSession, recentPoints, lastPoint } = useLocationStore();
+  const { friends } = useFriendsStore();
   const { summary, distanceMi, progressToGoal } = useDailySummary();
   const { sessions } = useTimeline();
   const { show: showAlert, element: alertElement } = useAlert();
+  const { t } = useTranslation();
+  const { bottom: safeBottom } = useSafeAreaInsets();
+  // Custom tab bar body ≈ 65px + safe area bottom padding
+  const scrollPaddingBottom = 65 + Math.max(safeBottom, 10) + 24;
+
+  // Realtime friends subscription
+  useRealtimeFriends(user?.id);
+
+  // Start/stop friend location publisher with tracking
+  useEffect(() => {
+    if (isTracking && user?.id) {
+      initPublisher(user.id);
+    } else {
+      stopPublisher();
+    }
+  }, [isTracking, user?.id]);
   const [mapFullscreen, setMapFullscreen] = useState(false);
   const cameraRef = useRef<CameraRef>(null);
+  const fullscreenCameraRef = useRef<CameraRef>(null);
+
+  const flyToUser = () => {
+    if (!lastPoint || !fullscreenCameraRef.current) return;
+    fullscreenCameraRef.current.flyTo({
+      center: [lastPoint.lng, lastPoint.lat],
+      zoom: 16,
+      duration: 600,
+    });
+  };
 
   const firstName = user?.displayName?.split(' ')[0] ?? 'Explorer';
   const progressPct = Math.round(progressToGoal * 100);
@@ -74,10 +106,10 @@ export default function HomeScreen() {
   // Fly camera to latest GPS point
   useEffect(() => {
     if (lastPoint && cameraRef.current) {
-      cameraRef.current.setCamera({
-        centerCoordinate: [lastPoint.lng, lastPoint.lat],
-        zoomLevel: 14,
-        animationDuration: 800,
+      cameraRef.current.flyTo({
+        center: [lastPoint.lng, lastPoint.lat],
+        zoom: 14,
+        duration: 800,
       });
     }
   }, [lastPoint?.lat, lastPoint?.lng]);
@@ -91,7 +123,7 @@ export default function HomeScreen() {
       <LinearGradient colors={['#06060E', '#0A0A14', '#06060E']} style={StyleSheet.absoluteFill} />
 
       <SafeAreaView style={styles.safe} edges={['top']}>
-        <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.scroll}>
+        <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={[styles.scroll, { paddingBottom: scrollPaddingBottom }]}>
           <Animated.View style={{ opacity: fadeAnim, transform: [{ translateY: slideAnim }] }}>
 
             {/* ── Header ── */}
@@ -102,24 +134,40 @@ export default function HomeScreen() {
                   color={isTracking ? COLORS.success : COLORS.textMuted}
                 />
                 <Text style={styles.greeting}>
-                  {getGreeting()},{'\n'}
+                  {t(getGreetingKey())},{'\n'}
                   <Text style={styles.greetingName}>{firstName}</Text>
                 </Text>
               </View>
-              <TouchableOpacity
-                style={styles.bellBtn}
-                onPress={() => showAlert({
-                  title: 'Notifications',
-                  message: 'No new notifications.',
-                  icon: 'notifications-outline',
-                  iconColor: COLORS.primary,
-                })}
-                activeOpacity={0.75}
-              >
-                <BlurView intensity={50} tint="dark" style={StyleSheet.absoluteFill} />
-                <View style={styles.bellBorder} />
-                <Ionicons name="notifications-outline" size={20} color={COLORS.textSecondary} />
-              </TouchableOpacity>
+              <View style={styles.headerBtns}>
+                <TouchableOpacity
+                  style={styles.headerIconBtn}
+                  onPress={() => router.push('/friends')}
+                  activeOpacity={0.75}
+                >
+                  <BlurView intensity={50} tint="dark" style={StyleSheet.absoluteFill} />
+                  <View style={styles.headerIconBorder} />
+                  <Ionicons name="people-outline" size={20} color={COLORS.textSecondary} />
+                  {friends.length > 0 && (
+                    <View style={styles.friendsBadge}>
+                      <Text style={styles.friendsBadgeText}>{friends.length}</Text>
+                    </View>
+                  )}
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={styles.headerIconBtn}
+                  onPress={() => showAlert({
+                    title: t('home.notifications'),
+                    message: t('home.noNotifications'),
+                    icon: 'notifications-outline',
+                    iconColor: COLORS.primary,
+                  })}
+                  activeOpacity={0.75}
+                >
+                  <BlurView intensity={50} tint="dark" style={StyleSheet.absoluteFill} />
+                  <View style={styles.headerIconBorder} />
+                  <Ionicons name="notifications-outline" size={20} color={COLORS.textSecondary} />
+                </TouchableOpacity>
+              </View>
             </View>
 
             {/* ── Map Hero Card ── */}
@@ -127,20 +175,19 @@ export default function HomeScreen() {
               <MapView
                 style={styles.map}
                 mapStyle={MAP_STYLE}
-                scrollEnabled={false}
-                pitchEnabled={false}
-                rotateEnabled={false}
-                zoomEnabled={false}
-                attributionEnabled={false}
-                logoEnabled={false}
+                dragPan={false}
+                touchPitch={false}
+                touchRotate={false}
+                touchAndDoubleTapZoom={false}
+                attribution={false}
+                logo={false}
               >
                 <Camera
                   ref={cameraRef}
-                  centerCoordinate={centerCoord}
-                  zoomLevel={13}
-                  animationDuration={0}
+                  center={centerCoord}
+                  zoom={13}
                 />
-                {isTracking && <UserLocation visible renderMode="normal" />}
+                {isTracking && <UserLocation />}
                 <RouteLayer allCoords={routeCoords} visibleCoords={routeCoords} />
                 {sessions.slice(0, 5).map((s) => (
                   <VisitMarker
@@ -148,6 +195,9 @@ export default function HomeScreen() {
                     session={s}
                     onPress={() => router.push(`/place/${s.id}`)}
                   />
+                ))}
+                {friends.map((f) => (
+                  <FriendMarker key={f.userId} friend={f} />
                 ))}
               </MapView>
 
@@ -164,11 +214,11 @@ export default function HomeScreen() {
                 <View style={styles.mapLiveBorder} />
                 {isTracking ? (
                   <LiveIndicator
-                    label={currentPlace ? currentPlace.toUpperCase() : 'LIVE'}
+                    label={currentPlace ? currentPlace.toUpperCase() : t('home.live')}
                     color={COLORS.success}
                   />
                 ) : (
-                  <LiveIndicator label="TAP TO START" color={COLORS.textMuted} />
+                  <LiveIndicator label={t('home.tapToStart')} color={COLORS.textMuted} />
                 )}
               </View>
 
@@ -194,14 +244,14 @@ export default function HomeScreen() {
               <View style={styles.distanceBorder} />
               <View style={styles.distanceRow}>
                 <View style={styles.distanceLeft}>
-                  <Text style={styles.distanceLabel}>TODAY'S DISTANCE</Text>
+                  <Text style={styles.distanceLabel}>{t('home.todayDistance')}</Text>
                   <View style={styles.distanceValueRow}>
                     <Text style={styles.distanceValue}>{distanceMi.toFixed(1)}</Text>
                     <Text style={styles.distanceUnit}>mi</Text>
                   </View>
                   <ProgressBar
                     progress={progressToGoal}
-                    label={progressPct > 0 ? `${progressPct}% of daily goal` : 'Start moving'}
+                    label={progressPct > 0 ? `${progressPct}${t('home.dailyGoal')}` : t('home.startMoving')}
                     height={5}
                     style={styles.progressBar}
                   />
@@ -216,17 +266,17 @@ export default function HomeScreen() {
 
             {/* ── Stats Grid ── */}
             <View style={styles.statsGrid}>
-              <StatTile icon="time-outline" label="TIME OUTSIDE" value={timeOutside} color={COLORS.primary} />
-              <StatTile icon="location-outline" label="PLACES" value={String(placesVisited)} color={COLORS.accent} />
+              <StatTile icon="time-outline" label={t('home.timeOutside')} value={timeOutside} color={COLORS.primary} />
+              <StatTile icon="location-outline" label={t('home.places')} value={String(placesVisited)} color={COLORS.accent} />
               <StatTile
                 icon="trending-up-outline"
-                label="STEPS (EST)"
+                label={t('home.stepsEst')}
                 value={summary?.stepsEstimated ? `${(summary.stepsEstimated / 1000).toFixed(1)}k` : '—'}
                 color={COLORS.success}
               />
               <StatTile
                 icon="flame-outline"
-                label="ACTIVE MIN"
+                label={t('home.activeMin')}
                 value={summary ? String(Math.round(summary.timeOutsideMin * 0.6)) : '—'}
                 color={COLORS.warning}
               />
@@ -236,9 +286,9 @@ export default function HomeScreen() {
             {sessions.length > 0 && (
               <View style={styles.recentSection}>
                 <View style={styles.recentHeader}>
-                  <Text style={styles.recentTitle}>RECENT PLACES</Text>
+                  <Text style={styles.recentTitle}>{t('home.recentPlaces')}</Text>
                   <TouchableOpacity onPress={() => router.push('/(tabs)/timeline')} activeOpacity={0.7}>
-                    <Text style={styles.recentSeeAll}>See all →</Text>
+                    <Text style={styles.recentSeeAll}>{t('common.seeAll')}</Text>
                   </TouchableOpacity>
                 </View>
                 {sessions.slice(0, 3).map((s) => (
@@ -279,15 +329,15 @@ export default function HomeScreen() {
           <MapView
             style={StyleSheet.absoluteFill}
             mapStyle={MAP_STYLE}
-            attributionEnabled={false}
-            logoEnabled={false}
+            attribution={false}
+            logo={false}
           >
             <Camera
-              centerCoordinate={centerCoord}
-              zoomLevel={14}
-              animationDuration={0}
+              ref={fullscreenCameraRef}
+              center={centerCoord}
+              zoom={14}
             />
-            {isTracking && <UserLocation visible renderMode="normal" />}
+            {isTracking && <UserLocation />}
             <RouteLayer allCoords={routeCoords} visibleCoords={routeCoords} />
             {sessions.slice(0, 5).map((s) => (
               <VisitMarker
@@ -298,6 +348,9 @@ export default function HomeScreen() {
                   router.push(`/place/${s.id}`);
                 }}
               />
+            ))}
+            {friends.map((f) => (
+              <FriendMarker key={f.userId} friend={f} />
             ))}
           </MapView>
 
@@ -312,6 +365,18 @@ export default function HomeScreen() {
               <Ionicons name="close" size={20} color="#fff" />
             </TouchableOpacity>
           </SafeAreaView>
+
+          {lastPoint && (
+            <TouchableOpacity
+              style={styles.locateBtn}
+              onPress={flyToUser}
+              activeOpacity={0.8}
+            >
+              <BlurView intensity={60} tint="dark" style={StyleSheet.absoluteFill} />
+              <View style={styles.closeBtnBorder} />
+              <Ionicons name="locate" size={20} color={COLORS.accent} />
+            </TouchableOpacity>
+          )}
         </View>
       </Modal>
 
@@ -348,7 +413,7 @@ function StatTile({
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#06060E' },
   safe: { flex: 1 },
-  scroll: { paddingHorizontal: SPACING.md, paddingBottom: 110 },
+  scroll: { paddingHorizontal: SPACING.md },
 
   header: {
     flexDirection: 'row',
@@ -360,11 +425,19 @@ const styles = StyleSheet.create({
   headerLeft: { flex: 1 },
   greeting: { color: COLORS.textSecondary, fontSize: FONT.sizes.md, marginTop: 6, lineHeight: 22 },
   greetingName: { color: COLORS.textPrimary, fontSize: FONT.sizes.xxl, fontWeight: FONT.weights.black, lineHeight: 34 },
-  bellBtn: {
+  headerBtns: { flexDirection: 'row', gap: SPACING.xs, marginTop: 4 },
+  headerIconBtn: {
     width: 42, height: 42, borderRadius: RADIUS.md, overflow: 'hidden',
-    backgroundColor: COLORS.glass, alignItems: 'center', justifyContent: 'center', marginTop: 4,
+    backgroundColor: COLORS.glass, alignItems: 'center', justifyContent: 'center',
   },
-  bellBorder: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, borderRadius: RADIUS.md, borderWidth: 1, borderColor: COLORS.border },
+  headerIconBorder: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, borderRadius: RADIUS.md, borderWidth: 1, borderColor: COLORS.border },
+  friendsBadge: {
+    position: 'absolute', top: 6, right: 6,
+    width: 14, height: 14, borderRadius: 7,
+    backgroundColor: COLORS.primary,
+    alignItems: 'center', justifyContent: 'center',
+  },
+  friendsBadgeText: { color: '#fff', fontSize: 8, fontWeight: FONT.weights.bold },
 
   mapCard: {
     height: 220, borderRadius: RADIUS.xl, overflow: 'hidden',
@@ -433,6 +506,18 @@ const styles = StyleSheet.create({
 
   fullscreenMap: { flex: 1, backgroundColor: '#06060E' },
   fullscreenClose: { position: 'absolute', top: 0, left: 0, right: 0 },
+  locateBtn: {
+    position: 'absolute',
+    bottom: 100,
+    right: SPACING.md,
+    width: 44,
+    height: 44,
+    borderRadius: RADIUS.full,
+    overflow: 'hidden',
+    backgroundColor: 'rgba(0,0,0,0.5)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
   closeBtn: {
     margin: SPACING.md,
     width: 40,
