@@ -62,11 +62,10 @@ export default function UsernameScreen() {
     try {
       const { error } = await supabase
         .from('user_profiles')
-        .upsert({
-          user_id: user.id,
-          username: trimmed,
-          display_name: user.displayName,
-        });
+        .upsert(
+          { user_id: user.id, username: trimmed, display_name: user.displayName },
+          { onConflict: 'user_id' }
+        );
       if (error) throw error;
       setUsername(trimmed);
       router.replace('/(tabs)');

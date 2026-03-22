@@ -49,11 +49,20 @@ export default function SignupScreen() {
     clearError();
     if (!validate()) return;
     await signUpWithEmail(email.trim(), password, displayName.trim());
+    // Navigate explicitly — don't rely solely on AuthGate timing
+    const state = useAuthStore.getState();
+    if (state.session && !state.pendingEmailConfirmation) {
+      router.replace('/(auth)/username');
+    }
   };
 
   const handleGoogle = async () => {
     clearError();
     await signInWithGoogle();
+    const state = useAuthStore.getState();
+    if (state.session && !state.user?.username) {
+      router.replace('/(auth)/username');
+    }
   };
 
   // ── Email confirmation pending ─────────────────────────────────────────────

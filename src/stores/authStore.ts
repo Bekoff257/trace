@@ -22,6 +22,15 @@ interface AuthState {
   setUsername: (username: string) => void;
 }
 
+async function fetchUsername(userId: string): Promise<string | undefined> {
+  const { data } = await supabase
+    .from('user_profiles')
+    .select('username')
+    .eq('user_id', userId)
+    .maybeSingle();
+  return data?.username ?? undefined;
+}
+
 // Map Supabase auth user to our User type
 function mapSupabaseUser(supabaseUser: any): User {
   return {
@@ -52,16 +61,7 @@ export const useAuthStore = create<AuthState>((set) => ({
       const { data: { session } } = await supabase.auth.getSession();
       const mappedUser = session?.user ? mapSupabaseUser(session.user) : null;
 
-      // Fetch username from user_profiles
-      let username: string | undefined;
-      if (session?.user?.id) {
-        const { data: profile } = await supabase
-          .from('user_profiles')
-          .select('username')
-          .eq('user_id', session.user.id)
-          .maybeSingle();
-        username = profile?.username ?? undefined;
-      }
+      const username = session?.user?.id ? await fetchUsername(session.user.id) : undefined;
 
       set({
         session,
@@ -71,15 +71,7 @@ export const useAuthStore = create<AuthState>((set) => ({
 
       supabase.auth.onAuthStateChange(async (_event, session) => {
         const mappedUser = session?.user ? mapSupabaseUser(session.user) : null;
-        let username: string | undefined;
-        if (session?.user?.id) {
-          const { data: profile } = await supabase
-            .from('user_profiles')
-            .select('username')
-            .eq('user_id', session.user.id)
-            .maybeSingle();
-          username = profile?.username ?? undefined;
-        }
+        const username = session?.user?.id ? await fetchUsername(session.user.id) : undefined;
         set({
           session,
           user: mappedUser ? { ...mappedUser, username } : null,
@@ -95,9 +87,10 @@ export const useAuthStore = create<AuthState>((set) => ({
     try {
       const { data, error } = await supabase.auth.signInWithPassword({ email, password });
       if (error) throw error;
+      const username = data.user?.id ? await fetchUsername(data.user.id) : undefined;
       set({
         session: data.session,
-        user: data.user ? mapSupabaseUser(data.user) : null,
+        user: data.user ? { ...mapSupabaseUser(data.user), username } : null,
         isLoading: false,
       });
     } catch (err: any) {
@@ -159,9 +152,10 @@ export const useAuthStore = create<AuthState>((set) => ({
           const { data: sessionData, error: sessionError } =
             await supabase.auth.setSession({ access_token: accessToken, refresh_token: refreshToken });
           if (sessionError) throw sessionError;
+          const username = sessionData.user?.id ? await fetchUsername(sessionData.user.id) : undefined;
           set({
             session: sessionData.session,
-            user: sessionData.user ? mapSupabaseUser(sessionData.user) : null,
+            user: sessionData.user ? { ...mapSupabaseUser(sessionData.user), username } : null,
           });
         }
       }
