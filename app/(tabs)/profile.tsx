@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Switch, Alert, Linking } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Switch, Alert, Linking, Modal, TextInput } from 'react-native';
 import { useTranslation } from 'react-i18next';
 import { LANGUAGES, changeLanguage, getCurrentLanguage, type Language } from '@i18n/index';
 import { router } from 'expo-router';
@@ -62,21 +62,27 @@ export default function ProfileScreen() {
   const email = user?.email ?? 'alex@example.com';
   const initial = displayName.charAt(0).toUpperCase();
   const [isTogglingTracking, setIsTogglingTracking] = useState(false);
+  const [editModalVisible, setEditModalVisible] = useState(false);
+  const [editName, setEditName] = useState(displayName);
+  const [optimisticTracking, setOptimisticTracking] = useState(isTracking);
   const [currentLang, setCurrentLang] = useState<Language>(getCurrentLanguage());
   const batterySaver = mode === 'low_power';
 
   async function handleTrackingToggle(enabled: boolean) {
     if (!user?.id || isTogglingTracking) return;
+    setOptimisticTracking(enabled);
     setIsTogglingTracking(true);
     try {
       if (enabled) {
         const started = await startTracking(user.id);
         setTracking(started);
+        if (!started) setOptimisticTracking(false);
       } else {
         await stopTracking();
         setTracking(false);
       }
     } catch {
+      setOptimisticTracking(isTracking);
       Alert.alert(t('common.error'), t('profile.trackingError'));
     } finally {
       setIsTogglingTracking(false);
@@ -107,8 +113,21 @@ export default function ProfileScreen() {
     });
   }
 
+  async function handleSaveName() {
+    const name = editName.trim();
+    if (!name) return;
+    try {
+      const { supabase } = await import('@services/supabaseClient');
+      await supabase.auth.updateUser({ data: { display_name: name } });
+      setEditModalVisible(false);
+    } catch {
+      Alert.alert(t('common.error'), 'Could not update name.');
+    }
+  }
+
   function handleEditProfile() {
-    Alert.alert(t('profile.editProfile'), t('profile.editProfileSoon'));
+    setEditName(displayName);
+    setEditModalVisible(true);
   }
 
   async function handleLanguageSelect(lang: Language) {
@@ -159,7 +178,7 @@ export default function ProfileScreen() {
               iconColor={isTracking ? COLORS.success : COLORS.primary}
               label={t('profile.locationTracking')}
               isToggle
-              toggleValue={isTracking}
+              toggleValue={optimisticTracking}
               onToggle={handleTrackingToggle}
             />
             <View style={styles.divider} />
@@ -236,6 +255,33 @@ export default function ProfileScreen() {
           <Text style={styles.version}>{t('common.version')}</Text>
         </ScrollView>
       </SafeAreaView>
+
+      <Modal visible={editModalVisible} transparent animationType="fade" onRequestClose={() => setEditModalVisible(false)}>
+        <View style={styles.modalOverlay}>
+          <BlurView intensity={40} tint="dark" style={StyleSheet.absoluteFill} />
+          <View style={styles.modalCard}>
+            <View style={styles.modalCardBorder} />
+            <Text style={styles.modalTitle}>{t('profile.editProfile')}</Text>
+            <TextInput
+              style={styles.modalInput}
+              value={editName}
+              onChangeText={setEditName}
+              placeholder="Display name"
+              placeholderTextColor={COLORS.textMuted}
+              autoFocus
+              maxLength={40}
+            />
+            <View style={styles.modalActions}>
+              <TouchableOpacity style={styles.modalBtn} onPress={() => setEditModalVisible(false)} activeOpacity={0.7}>
+                <Text style={styles.modalBtnCancel}>{t('common.cancel')}</Text>
+              </TouchableOpacity>
+              <TouchableOpacity style={[styles.modalBtn, styles.modalBtnSave]} onPress={handleSaveName} activeOpacity={0.7}>
+                <Text style={styles.modalBtnSaveText}>{t('common.save')}</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
     </View>
   );
 }
@@ -329,5 +375,64 @@ const styles = StyleSheet.create({
     fontSize: FONT.sizes.xs,
     textAlign: 'center',
     marginBottom: SPACING.md,
+  },
+  modalOverlay: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: 'rgba(0,0,0,0.6)',
+  },
+  modalCard: {
+    width: '85%',
+    borderRadius: RADIUS.xl,
+    backgroundColor: COLORS.glass,
+    padding: SPACING.lg,
+    overflow: 'hidden',
+  },
+  modalCardBorder: {
+    ...StyleSheet.absoluteFillObject,
+    borderRadius: RADIUS.xl,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+  },
+  modalTitle: {
+    color: COLORS.textPrimary,
+    fontSize: FONT.sizes.lg,
+    fontWeight: FONT.weights.bold,
+    marginBottom: SPACING.md,
+  },
+  modalInput: {
+    backgroundColor: 'rgba(255,255,255,0.06)',
+    borderRadius: RADIUS.md,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    color: COLORS.textPrimary,
+    fontSize: FONT.sizes.md,
+    paddingHorizontal: SPACING.md,
+    paddingVertical: SPACING.sm,
+    marginBottom: SPACING.md,
+  },
+  modalActions: {
+    flexDirection: 'row',
+    justifyContent: 'flex-end',
+    gap: SPACING.sm,
+  },
+  modalBtn: {
+    paddingHorizontal: SPACING.md,
+    paddingVertical: SPACING.xs + 2,
+    borderRadius: RADIUS.md,
+  },
+  modalBtnCancel: {
+    color: COLORS.textMuted,
+    fontSize: FONT.sizes.md,
+    fontWeight: FONT.weights.medium,
+  },
+  modalBtnSave: {
+    backgroundColor: COLORS.primary,
+  },
+  modalBtnSaveText: {
+    color: COLORS.textPrimary,
+    fontSize: FONT.sizes.md,
+    fontWeight: FONT.weights.semibold,
   },
 });

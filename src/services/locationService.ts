@@ -155,6 +155,8 @@ async function startForegroundTracking(): Promise<void> {
     getTrackingParams(),
     async (loc) => {
       try {
+        // Skip jittery indoor points — accuracy > 30m means unreliable fix
+        if ((loc.coords.accuracy ?? 999) > 30) return;
         const point = locationObjectToPoint(loc, _currentUserId);
         if (!point) return;
         await insertLocationPoint(point);

@@ -21,8 +21,8 @@ export default function StatCard({ icon, iconColor = COLORS.primary, label, valu
         <View style={[styles.iconWrap, { backgroundColor: `${iconColor}22` }]}>
           <Ionicons name={icon} size={16} color={iconColor} />
         </View>
-        <Text style={styles.label}>{label}</Text>
-        <Text style={styles.value}>{value}</Text>
+        <Text style={styles.label} numberOfLines={1} adjustsFontSizeToFit>{label}</Text>
+        <Text style={styles.value} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.6}>{value}</Text>
         {sub ? <Text style={styles.sub}>{sub}</Text> : null}
       </View>
     </View>

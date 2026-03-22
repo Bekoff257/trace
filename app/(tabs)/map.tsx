@@ -9,8 +9,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { router } from 'expo-router';
 import { useTimeline } from '@hooks/useTimeline';
-import { useDailySummary } from '@hooks/useDailySummary';
-import { COLORS, FONT, SPACING, RADIUS, GRADIENTS, LAYOUT } from '@constants/theme';
+import { COLORS, FONT, SPACING, RADIUS, GRADIENTS } from '@constants/theme';
 import SectionLabel from '@components/ui/SectionLabel';
 import TimelineItem from '@components/timeline/TimelineItem';
 
@@ -21,7 +20,6 @@ export default function LiveTimelineScreen() {
     day: 'numeric',
   });
   const { sessions } = useTimeline();
-  const { summary, distanceMi } = useDailySummary();
 
   async function handleShare() {
     const lines = sessions.map((s) => {
@@ -100,39 +98,6 @@ export default function LiveTimelineScreen() {
           )}
         </ScrollView>
 
-        {/* ── Daily Stats bar ── */}
-        <View style={styles.statsBar}>
-          <BlurView intensity={75} tint="dark" style={StyleSheet.absoluteFill} />
-          <LinearGradient
-            colors={['rgba(79,110,247,0.10)', 'rgba(79,110,247,0.02)']}
-            style={StyleSheet.absoluteFill}
-          />
-          <View style={styles.statsBarBorder} />
-
-          <View style={styles.statsHeader}>
-            <Text style={styles.statsTitle}>DAILY STATS</Text>
-            <TouchableOpacity onPress={() => router.push('/insights')} activeOpacity={0.7}>
-              <Ionicons name="trending-up-outline" size={16} color={COLORS.primary} />
-            </TouchableOpacity>
-          </View>
-
-          <View style={styles.statsRow}>
-            <View style={styles.statItem}>
-              <Text style={styles.statValue}>{distanceMi.toFixed(1)}</Text>
-              <Text style={styles.statUnit}>MILES</Text>
-            </View>
-            <View style={styles.statDivider} />
-            <View style={styles.statItem}>
-              <Text style={styles.statValue}>{sessions.length}</Text>
-              <Text style={styles.statUnit}>STOPS</Text>
-            </View>
-            <View style={styles.statDivider} />
-            <View style={styles.statItem}>
-              <Text style={styles.statValue}>{summary?.pointsCount ?? 0}</Text>
-              <Text style={styles.statUnit}>POINTS</Text>
-            </View>
-          </View>
-        </View>
 
       </SafeAreaView>
     </View>
@@ -215,64 +180,4 @@ const styles = StyleSheet.create({
     lineHeight: 20,
   },
 
-  // Stats bar
-  statsBar: {
-    marginHorizontal: SPACING.md,
-    marginBottom: LAYOUT.tabBarHeight,
-    borderRadius: RADIUS.xl,
-    overflow: 'hidden',
-    backgroundColor: 'rgba(10,10,20,0.85)',
-    paddingHorizontal: SPACING.md,
-    paddingVertical: SPACING.sm + 4,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 6 },
-    shadowOpacity: 0.7,
-    shadowRadius: 16,
-    elevation: 16,
-  },
-  statsBarBorder: {
-    ...StyleSheet.absoluteFillObject,
-    borderRadius: RADIUS.xl,
-    borderWidth: 1,
-    borderColor: 'rgba(79,110,247,0.25)',
-  },
-  statsHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    marginBottom: SPACING.sm,
-  },
-  statsTitle: {
-    color: COLORS.textMuted,
-    fontSize: FONT.sizes.xs,
-    fontWeight: FONT.weights.semibold,
-    letterSpacing: 1.2,
-  },
-  statsRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-around',
-  },
-  statItem: {
-    flex: 1,
-    alignItems: 'center',
-    gap: 2,
-  },
-  statValue: {
-    color: COLORS.textPrimary,
-    fontSize: FONT.sizes.xl,
-    fontWeight: FONT.weights.black,
-    letterSpacing: -0.5,
-  },
-  statUnit: {
-    color: COLORS.textMuted,
-    fontSize: FONT.sizes.xs,
-    fontWeight: FONT.weights.semibold,
-    letterSpacing: 1,
-  },
-  statDivider: {
-    width: 1,
-    height: 32,
-    backgroundColor: COLORS.border,
-  },
 });

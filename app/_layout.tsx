@@ -13,9 +13,12 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { useAuthStore } from '@stores/authStore';
+import { useLocationStore } from '@stores/locationStore';
 import { useLocation } from '@hooks/useLocation';
 import { COLORS } from '@constants/theme';
 import { registerForPushNotifications, setupNotificationTapHandler } from '@services/notificationService';
+import { getPointsForDate } from '@services/localDB';
+import { todayDateString } from '@services/summaryService';
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -37,6 +40,21 @@ function NotificationManager() {
     registerForPushNotifications(session.user.id);
     return setupNotificationTapHandler();
   }, [session?.user?.id]);
+
+  return null;
+}
+
+function HistoryHydrator() {
+  const { session } = useAuthStore();
+  const { recentPoints, addPoint } = useLocationStore();
+  const userId = session?.user?.id;
+
+  useEffect(() => {
+    if (!userId || recentPoints.length > 0) return;
+    getPointsForDate(userId, todayDateString())
+      .then((pts) => pts.forEach((p) => addPoint(p)))
+      .catch(() => {});
+  }, [userId]);
 
   return null;
 }
@@ -104,6 +122,7 @@ export default function RootLayout() {
           <AuthGate />
           <LocationManager />
           <NotificationManager />
+          <HistoryHydrator />
         </QueryClientProvider>
       </SafeAreaProvider>
     </GestureHandlerRootView>

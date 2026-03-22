@@ -71,6 +71,7 @@ export default function HomeScreen() {
     }
   }, [isTracking, user?.id]);
   const [mapFullscreen, setMapFullscreen] = useState(false);
+  const [fullscreenInitCenter, setFullscreenInitCenter] = useState<[number, number]>(centerCoord);
   const cameraRef = useRef<CameraRef>(null);
   const fullscreenCameraRef = useRef<CameraRef>(null);
 
@@ -225,7 +226,7 @@ export default function HomeScreen() {
               {/* Expand button */}
               <TouchableOpacity
                 style={styles.expandBtn}
-                onPress={() => setMapFullscreen(true)}
+                onPress={() => { setFullscreenInitCenter(centerCoord); setMapFullscreen(true); }}
                 activeOpacity={0.8}
               >
                 <BlurView intensity={60} tint="dark" style={StyleSheet.absoluteFill} />
@@ -334,7 +335,7 @@ export default function HomeScreen() {
           >
             <Camera
               ref={fullscreenCameraRef}
-              center={centerCoord}
+              center={fullscreenInitCenter}
               zoom={14}
             />
             {isTracking && <UserLocation />}
