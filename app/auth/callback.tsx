@@ -1,24 +1,28 @@
 import { useEffect } from 'react';
 import { View, ActivityIndicator, StyleSheet } from 'react-native';
-import { router, useLocalSearchParams } from 'expo-router';
+import { router } from 'expo-router';
+import * as WebBrowser from 'expo-web-browser';
 import { supabase } from '@services/supabaseClient';
 import { COLORS } from '@constants/theme';
 
+// This MUST be called here so Android can close the in-app browser
+// before Expo Router tries to render this screen.
+WebBrowser.maybeCompleteAuthSession();
+
 export default function AuthCallbackScreen() {
-  const params = useLocalSearchParams<Record<string, string>>();
-
   useEffect(() => {
-    const access_token = params.access_token;
-    const refresh_token = params.refresh_token;
-
-    if (access_token && refresh_token) {
-      supabase.auth
-        .setSession({ access_token, refresh_token })
-        .then(() => router.replace('/(tabs)'))
-        .catch(() => router.replace('/(auth)/login'));
-    } else {
-      router.replace('/(auth)/login');
-    }
+    // Supabase's onAuthStateChange will fire automatically when the session
+    // is set by the WebBrowser redirect. Just wait briefly then navigate.
+    const timer = setTimeout(() => {
+      supabase.auth.getSession().then(({ data }) => {
+        if (data.session) {
+          router.replace('/(tabs)');
+        } else {
+          router.replace('/(auth)/login');
+        }
+      });
+    }, 500);
+    return () => clearTimeout(timer);
   }, []);
 
   return (

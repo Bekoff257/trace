@@ -5,8 +5,6 @@ import { supabase } from '@services/supabaseClient';
 import type { User } from '@/types/index';
 import type { Session } from '@supabase/supabase-js';
 
-// Required for expo-auth-session on Android to close the browser after OAuth
-WebBrowser.maybeCompleteAuthSession();
 
 interface AuthState {
   session: Session | null;
