@@ -5,14 +5,12 @@ import * as WebBrowser from 'expo-web-browser';
 import { supabase } from '@services/supabaseClient';
 import { COLORS } from '@constants/theme';
 
-// This MUST be called here so Android can close the in-app browser
-// before Expo Router tries to render this screen.
+
 WebBrowser.maybeCompleteAuthSession();
 
 export default function AuthCallbackScreen() {
   useEffect(() => {
-    // Supabase's onAuthStateChange will fire automatically when the session
-    // is set by the WebBrowser redirect. Just wait briefly then navigate.
+
     const timer = setTimeout(() => {
       supabase.auth.getSession().then(({ data }) => {
         if (data.session) {

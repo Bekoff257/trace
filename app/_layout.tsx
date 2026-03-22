@@ -60,7 +60,7 @@ function HistoryHydrator() {
 }
 
 function AuthGate() {
-  const { session, isLoading, initialize } = useAuthStore();
+  const { session, user, isLoading, initialize } = useAuthStore();
   const segments = useSegments();
 
   useEffect(() => {
@@ -71,13 +71,16 @@ function AuthGate() {
     if (isLoading) return;
 
     const inAuthGroup = segments[0] === '(auth)';
+    const onUsernameScreen = inAuthGroup && segments[1] === 'username';
 
     if (!session && !inAuthGroup) {
       router.replace('/(auth)/onboarding');
-    } else if (session && inAuthGroup) {
+    } else if (session && !user?.username && !onUsernameScreen) {
+      router.replace('/(auth)/username');
+    } else if (session && user?.username && inAuthGroup) {
       router.replace('/(tabs)');
     }
-  }, [session, isLoading, segments]);
+  }, [session, user?.username, isLoading, segments]);
 
   if (isLoading) {
     return (

@@ -9,6 +9,7 @@ import {
   Share,
   ActivityIndicator,
 } from 'react-native';
+import { useTranslation } from 'react-i18next';
 import { router } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { BlurView } from 'expo-blur';
@@ -28,18 +29,18 @@ function getInitials(name: string) {
   return name.split(' ').map((w) => w[0]).join('').toUpperCase().slice(0, 2);
 }
 
-function getLastSeen(updatedAt: string): string {
+function getLastSeen(updatedAt: string, t: (key: string, opts?: any) => string): string {
   const diff = Math.floor((Date.now() - new Date(updatedAt).getTime()) / 1000);
-  if (diff < 60) return 'Active now';
-  if (diff < 3600) return `${Math.floor(diff / 60)}m ago`;
-  if (diff < 86400) return `${Math.floor(diff / 3600)}h ago`;
-  return `${Math.floor(diff / 86400)}d ago`;
+  if (diff < 60) return t('friends.activeNow');
+  if (diff < 3600) return t('friends.minutesAgo', { count: Math.floor(diff / 60) });
+  if (diff < 86400) return t('friends.hoursAgo', { count: Math.floor(diff / 3600) });
+  return t('friends.daysAgo', { count: Math.floor(diff / 86400) });
 }
 
-function statusLabel(status: string) {
-  if (status === 'driving') return '🚗 Driving';
-  if (status === 'walking') return '🚶 Walking';
-  return '• Stationary';
+function statusLabel(status: string, t: (key: string) => string) {
+  if (status === 'driving') return `🚗 ${t('friends.driving')}`;
+  if (status === 'walking') return `🚶 ${t('friends.walking')}`;
+  return `• ${t('friends.stationary')}`;
 }
 
 function batteryColor(level: number, charging: boolean) {
@@ -52,6 +53,7 @@ function batteryColor(level: number, charging: boolean) {
 // ─── Sub-components ───────────────────────────────────────────────────────────
 
 function FriendRow({ friend, onRemove }: { friend: Friend; onRemove: () => void }) {
+  const { t } = useTranslation();
   const loc = friend.location;
   const isOnline = loc
     ? Date.now() - new Date(loc.updatedAt).getTime() < 5 * 60 * 1000
@@ -79,10 +81,10 @@ function FriendRow({ friend, onRemove }: { friend: Friend; onRemove: () => void 
         <Text style={styles.friendName}>{friend.displayName}</Text>
         {loc ? (
           <Text style={styles.friendSub}>
-            {statusLabel(loc.status)} · {getLastSeen(loc.updatedAt)}
+            {statusLabel(loc.status, t)} · {getLastSeen(loc.updatedAt, t)}
           </Text>
         ) : (
-          <Text style={styles.friendSub}>Location not shared yet</Text>
+          <Text style={styles.friendSub}>{t('friends.locationNotShared')}</Text>
         )}
       </View>
 
@@ -109,8 +111,6 @@ function FriendRow({ friend, onRemove }: { friend: Friend; onRemove: () => void 
 }
 
 function PendingRow({
-  userId,
-  senderId,
   senderName,
   onAccept,
 }: {
@@ -119,6 +119,7 @@ function PendingRow({
   senderName: string;
   onAccept: () => void;
 }) {
+  const { t } = useTranslation();
   return (
     <View style={styles.pendingRow}>
       <BlurView intensity={30} tint="dark" style={StyleSheet.absoluteFill} />
@@ -128,11 +129,11 @@ function PendingRow({
       </View>
       <View style={styles.friendInfo}>
         <Text style={styles.friendName}>{senderName}</Text>
-        <Text style={styles.friendSub}>Wants to be your friend</Text>
+        <Text style={styles.friendSub}>{t('friends.wantsToBeYourFriend')}</Text>
       </View>
       <TouchableOpacity style={styles.acceptBtn} onPress={onAccept} activeOpacity={0.8}>
         <LinearGradient colors={GRADIENTS.primary} style={StyleSheet.absoluteFill} start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }} />
-        <Text style={styles.acceptBtnText}>Accept</Text>
+        <Text style={styles.acceptBtnText}>{t('friends.accept')}</Text>
       </TouchableOpacity>
     </View>
   );
@@ -141,11 +142,12 @@ function PendingRow({
 // ─── Main Screen ──────────────────────────────────────────────────────────────
 
 export default function FriendsScreen() {
+  const { t } = useTranslation();
   const { user } = useAuthStore();
   const { friends, fetchFriends, removeFriend, acceptFriendRequest, sendFriendRequest } = useFriendsStore();
   const { show: showAlert, element: alertElement } = useAlert();
 
-  const [addEmail, setAddEmail] = useState('');
+  const [addUsername, setAddUsername] = useState('');
   const [addLoading, setAddLoading] = useState(false);
   const [pendingRequests, setPendingRequests] = useState<
     { id: string; userId: string; displayName: string }[]
@@ -188,15 +190,15 @@ export default function FriendsScreen() {
   };
 
   const handleSendRequest = async () => {
-    if (!user?.id || !addEmail.trim()) return;
+    if (!user?.id || !addUsername.trim()) return;
     setAddLoading(true);
-    const err = await sendFriendRequest(user.id, addEmail.trim());
+    const err = await sendFriendRequest(user.id, addUsername.trim());
     setAddLoading(false);
-    setAddEmail('');
+    setAddUsername('');
     if (err) {
-      showAlert({ title: 'Not found', message: err, icon: 'alert-circle-outline', iconColor: COLORS.warning });
+      showAlert({ title: t('friends.notFound'), message: err, icon: 'alert-circle-outline', iconColor: COLORS.warning });
     } else {
-      showAlert({ title: 'Request sent!', message: `Friend request sent.`, icon: 'checkmark-circle-outline', iconColor: COLORS.success });
+      showAlert({ title: t('friends.requestSent'), message: t('friends.sendError').replace('Could not send', 'Sent'), icon: 'checkmark-circle-outline', iconColor: COLORS.success });
     }
   };
 
@@ -208,14 +210,14 @@ export default function FriendsScreen() {
 
   const handleRemove = async (friendId: string, name: string) => {
     showAlert({
-      title: `Remove ${name}?`,
-      message: 'They will no longer see your location.',
+      title: t('friends.removeTitle', { name }),
+      message: t('friends.removeBody'),
       icon: 'person-remove-outline',
       iconColor: COLORS.error,
       buttons: [
-        { text: 'Cancel', style: 'cancel' },
+        { text: t('common.cancel'), style: 'cancel' },
         {
-          text: 'Remove',
+          text: t('friends.remove'),
           style: 'destructive',
           onPress: () => { if (user?.id) removeFriend(user.id, friendId); },
         },
@@ -224,11 +226,12 @@ export default function FriendsScreen() {
   };
 
   const handleShareInvite = async () => {
-    if (!user?.id) return;
+    if (!user) return;
     try {
+      const handle = user.username ? `@${user.username}` : user.id;
       await Share.share({
-        message: `Add me on Location Tracker! My invite code: ${user.id}\n\nOpen the app → Friends → Add Friend → paste this code.`,
-        title: 'Join me on Location Tracker',
+        message: `Add me on Trace! My username: ${handle}\n\nOpen the app → Friends → search by username.`,
+        title: 'Join me on Trace',
       });
     } catch {}
   };
@@ -244,8 +247,8 @@ export default function FriendsScreen() {
             <Ionicons name="chevron-back" size={22} color={COLORS.textPrimary} />
           </TouchableOpacity>
           <View>
-            <Text style={styles.headerTitle}>Friends</Text>
-            <Text style={styles.headerSub}>{friends.length} connected</Text>
+            <Text style={styles.headerTitle}>{t('friends.title')}</Text>
+            <Text style={styles.headerSub}>{t('friends.connected', { count: friends.length })}</Text>
           </View>
           <TouchableOpacity onPress={handleShareInvite} style={styles.shareBtn} activeOpacity={0.8}>
             <BlurView intensity={50} tint="dark" style={StyleSheet.absoluteFill} />
@@ -258,18 +261,18 @@ export default function FriendsScreen() {
 
           {/* Add Friend */}
           <View style={styles.section}>
-            <Text style={styles.sectionLabel}>ADD FRIEND</Text>
+            <Text style={styles.sectionLabel}>{t('friends.addFriend').toUpperCase()}</Text>
             <View style={styles.addRow}>
               <View style={styles.inputWrap}>
                 <BlurView intensity={30} tint="dark" style={StyleSheet.absoluteFill} />
                 <View style={styles.inputBorder} />
-                <Ionicons name="search-outline" size={16} color={COLORS.textMuted} style={styles.inputIcon} />
+                <Ionicons name="at-outline" size={16} color={COLORS.textMuted} style={styles.inputIcon} />
                 <TextInput
                   style={styles.input}
-                  placeholder="Name or invite code…"
+                  placeholder={t('friends.addPlaceholder')}
                   placeholderTextColor={COLORS.textMuted}
-                  value={addEmail}
-                  onChangeText={setAddEmail}
+                  value={addUsername}
+                  onChangeText={setAddUsername}
                   autoCapitalize="none"
                   autoCorrect={false}
                   returnKeyType="send"
@@ -280,7 +283,7 @@ export default function FriendsScreen() {
                 style={styles.sendBtn}
                 onPress={handleSendRequest}
                 activeOpacity={0.8}
-                disabled={addLoading || !addEmail.trim()}
+                disabled={addLoading || !addUsername.trim()}
               >
                 <LinearGradient colors={GRADIENTS.primary} style={StyleSheet.absoluteFill} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} />
                 {addLoading ? (
@@ -296,7 +299,7 @@ export default function FriendsScreen() {
               <BlurView intensity={20} tint="dark" style={StyleSheet.absoluteFill} />
               <View style={styles.inviteBorder} />
               <Ionicons name="link-outline" size={16} color={COLORS.accent} />
-              <Text style={styles.inviteText}>Share your invite link</Text>
+              <Text style={styles.inviteText}>{t('friends.inviteLink')}</Text>
               <Ionicons name="chevron-forward" size={14} color={COLORS.textMuted} />
             </TouchableOpacity>
           </View>
@@ -304,7 +307,7 @@ export default function FriendsScreen() {
           {/* Pending Requests */}
           {!loadingPending && pendingRequests.length > 0 && (
             <View style={styles.section}>
-              <Text style={styles.sectionLabel}>REQUESTS ({pendingRequests.length})</Text>
+              <Text style={styles.sectionLabel}>{t('friends.pendingRequests')} ({pendingRequests.length})</Text>
               {pendingRequests.map((req) => (
                 <PendingRow
                   key={req.id}
@@ -320,7 +323,9 @@ export default function FriendsScreen() {
           {/* Friends List */}
           <View style={styles.section}>
             <Text style={styles.sectionLabel}>
-              {friends.length > 0 ? `FRIENDS (${friends.length})` : 'NO FRIENDS YET'}
+              {friends.length > 0
+                ? `${t('friends.myFriends')} (${friends.length})`
+                : t('friends.emptyFriends').toUpperCase()}
             </Text>
             {friends.length === 0 ? (
               <View style={styles.emptyState}>
@@ -328,10 +333,8 @@ export default function FriendsScreen() {
                   <LinearGradient colors={GRADIENTS.primary} style={StyleSheet.absoluteFill} />
                   <Ionicons name="people-outline" size={28} color="#fff" />
                 </View>
-                <Text style={styles.emptyTitle}>Add your first friend</Text>
-                <Text style={styles.emptySub}>
-                  Share your invite link or search by name to connect.
-                </Text>
+                <Text style={styles.emptyTitle}>{t('friends.addFirstFriend')}</Text>
+                <Text style={styles.emptySub}>{t('friends.addFirstFriendSub')}</Text>
               </View>
             ) : (
               friends.map((f) => (

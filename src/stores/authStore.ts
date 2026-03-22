@@ -19,6 +19,7 @@ interface AuthState {
   signInWithGoogle: () => Promise<void>;
   signOut: () => Promise<void>;
   clearError: () => void;
+  setUsername: (username: string) => void;
 }
 
 // Map Supabase auth user to our User type
@@ -49,16 +50,39 @@ export const useAuthStore = create<AuthState>((set) => ({
   initialize: async () => {
     try {
       const { data: { session } } = await supabase.auth.getSession();
+      const mappedUser = session?.user ? mapSupabaseUser(session.user) : null;
+
+      // Fetch username from user_profiles
+      let username: string | undefined;
+      if (session?.user?.id) {
+        const { data: profile } = await supabase
+          .from('user_profiles')
+          .select('username')
+          .eq('user_id', session.user.id)
+          .maybeSingle();
+        username = profile?.username ?? undefined;
+      }
+
       set({
         session,
-        user: session?.user ? mapSupabaseUser(session.user) : null,
+        user: mappedUser ? { ...mappedUser, username } : null,
         isLoading: false,
       });
 
-      supabase.auth.onAuthStateChange((_event, session) => {
+      supabase.auth.onAuthStateChange(async (_event, session) => {
+        const mappedUser = session?.user ? mapSupabaseUser(session.user) : null;
+        let username: string | undefined;
+        if (session?.user?.id) {
+          const { data: profile } = await supabase
+            .from('user_profiles')
+            .select('username')
+            .eq('user_id', session.user.id)
+            .maybeSingle();
+          username = profile?.username ?? undefined;
+        }
         set({
           session,
-          user: session?.user ? mapSupabaseUser(session.user) : null,
+          user: mappedUser ? { ...mappedUser, username } : null,
         });
       });
     } catch {
@@ -154,4 +178,9 @@ export const useAuthStore = create<AuthState>((set) => ({
   },
 
   clearError: () => set({ error: null, pendingEmailConfirmation: false }),
+
+  setUsername: (username) =>
+    set((state) => ({
+      user: state.user ? { ...state.user, username } : null,
+    })),
 }));

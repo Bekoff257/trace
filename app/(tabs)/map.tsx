@@ -3,6 +3,7 @@
  * with a floating daily stats bar at the bottom.
  */
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Share } from 'react-native';
+import { useTranslation } from 'react-i18next';
 import { LinearGradient } from 'expo-linear-gradient';
 import { BlurView } from 'expo-blur';
 import { Ionicons } from '@expo/vector-icons';
@@ -14,7 +15,8 @@ import SectionLabel from '@components/ui/SectionLabel';
 import TimelineItem from '@components/timeline/TimelineItem';
 
 export default function LiveTimelineScreen() {
-  const today = new Date().toLocaleDateString('en-US', {
+  const { t, i18n } = useTranslation();
+  const today = new Date().toLocaleDateString(i18n.language, {
     weekday: 'long',
     month: 'long',
     day: 'numeric',
@@ -23,15 +25,15 @@ export default function LiveTimelineScreen() {
 
   async function handleShare() {
     const lines = sessions.map((s) => {
-      const time = new Date(s.startedAt).toLocaleTimeString('en-US', {
+      const time = new Date(s.startedAt).toLocaleTimeString(i18n.language, {
         hour: 'numeric',
         minute: '2-digit',
       });
       return `${time} – ${s.placeName}${s.durationMin ? ` (${s.durationMin}m)` : ''}`;
     });
     await Share.share({
-      title: `My timeline for ${today}`,
-      message: [`Timeline for ${today}`, '', ...lines].join('\n'),
+      title: t('timeline.shareTitle', { date: today }),
+      message: [t('timeline.shareMessage', { date: today }), '', ...lines].join('\n'),
     }).catch(() => {});
   }
 
@@ -44,8 +46,8 @@ export default function LiveTimelineScreen() {
         {/* ── Header ── */}
         <View style={styles.header}>
           <View>
-            <SectionLabel text="LIVE TIMELINE" color={COLORS.success} />
-            <Text style={styles.title}>Today</Text>
+            <SectionLabel text={t('timeline.sectionLabel')} color={COLORS.success} />
+            <Text style={styles.title}>{t('timeline.title')}</Text>
           </View>
           <View style={styles.headerActions}>
             <TouchableOpacity
@@ -81,10 +83,8 @@ export default function LiveTimelineScreen() {
                   <Ionicons name="footsteps-outline" size={28} color="#fff" />
                 </LinearGradient>
               </View>
-              <Text style={styles.emptyText}>Your day is just beginning</Text>
-              <Text style={styles.emptySubText}>
-                Start moving and your journey will{'\n'}appear here automatically.
-              </Text>
+              <Text style={styles.emptyText}>{t('timeline.emptyTitle')}</Text>
+              <Text style={styles.emptySubText}>{t('timeline.emptySubtitle')}</Text>
             </View>
           ) : (
             sessions.map((session, i) => (

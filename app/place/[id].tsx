@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Dimensions, Share, Linking, ActivityIndicator, Alert } from 'react-native';
 import { router, useLocalSearchParams } from 'expo-router';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -30,15 +31,16 @@ function formatDuration(min: number | undefined): string {
   return `${Math.floor(min / 60)}h ${min % 60}m`;
 }
 
-function formatDate(iso: string): string {
+function formatDate(iso: string, locale: string, todayLabel: string): string {
   const d = new Date(iso);
-  const today = new Date();
-  const isToday = d.toDateString() === today.toDateString();
-  if (isToday) return `Today, ${d.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })}`;
-  return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' });
+  const todayDate = new Date();
+  const isToday = d.toDateString() === todayDate.toDateString();
+  if (isToday) return `${todayLabel}, ${d.toLocaleTimeString(locale, { hour: 'numeric', minute: '2-digit' })}`;
+  return d.toLocaleDateString(locale, { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' });
 }
 
 export default function PlaceDetailsScreen() {
+  const { t, i18n } = useTranslation();
   const { id } = useLocalSearchParams<{ id: string }>();
   const { user } = useAuthStore();
   const [session, setSession] = useState<VisitSession | null>(null);
@@ -134,7 +136,7 @@ export default function PlaceDetailsScreen() {
         </View>
       ) : !session ? (
         <View style={styles.loadingWrap}>
-          <Text style={styles.notFound}>Place not found</Text>
+          <Text style={styles.notFound}>{t('place.notFound')}</Text>
         </View>
       ) : (
         <ScrollView
@@ -162,28 +164,28 @@ export default function PlaceDetailsScreen() {
             <StatCard
               icon="repeat"
               iconColor={COLORS.primary}
-              label="TOTAL VISITS"
+              label={t('place.visits').toUpperCase()}
               value={String(totalVisits)}
               style={styles.statItem}
             />
             <StatCard
               icon="time-outline"
               iconColor={COLORS.accent}
-              label="AVG DURATION"
+              label={t('place.avgDuration').toUpperCase()}
               value={formatDuration(avgDurationMin)}
               style={styles.statItem}
             />
             <StatCard
               icon="calendar-outline"
               iconColor={COLORS.success}
-              label="LAST VISIT"
-              value={formatDate(session.startedAt)}
+              label={t('place.lastVisit').toUpperCase()}
+              value={formatDate(session.startedAt, i18n.language, t('map.today'))}
               style={styles.statItem}
             />
             <StatCard
               icon="hourglass-outline"
               iconColor={COLORS.warning}
-              label="TOTAL TIME"
+              label={t('place.totalTime').toUpperCase()}
               value={formatDuration(totalMin)}
               style={styles.statItem}
             />
@@ -191,7 +193,7 @@ export default function PlaceDetailsScreen() {
 
           {/* Visit frequency */}
           <View style={styles.section}>
-            <Text style={styles.sectionTitle}>VISIT FREQUENCY BY DAY</Text>
+            <Text style={styles.sectionTitle}>{t('place.visitFrequency')}</Text>
             <View style={styles.freqCard}>
               <BlurView intensity={15} tint="dark" style={StyleSheet.absoluteFill} />
               <View style={styles.freqBorder} />
@@ -207,7 +209,9 @@ export default function PlaceDetailsScreen() {
                 ))}
               </View>
               <View style={styles.freqLabels}>
-                {['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].map((d, i) => (
+                {Array.from({ length: 7 }, (_, i) =>
+                  new Date(2024, 0, 7 + i).toLocaleDateString(i18n.language, { weekday: 'short' })
+                ).map((d, i) => (
                   <Text key={i} style={[styles.freqLabel, i === today && styles.freqLabelActive]}>{d}</Text>
                 ))}
               </View>
@@ -220,19 +224,19 @@ export default function PlaceDetailsScreen() {
               <BlurView intensity={20} tint="dark" style={StyleSheet.absoluteFill} />
               <View style={styles.actionBorder} />
               <Ionicons name="navigate-outline" size={18} color={COLORS.primary} />
-              <Text style={styles.actionLabel}>Directions</Text>
+              <Text style={styles.actionLabel}>{t('place.directions')}</Text>
             </TouchableOpacity>
             <TouchableOpacity style={styles.actionBtn} onPress={handleShare} activeOpacity={0.75}>
               <BlurView intensity={20} tint="dark" style={StyleSheet.absoluteFill} />
               <View style={styles.actionBorder} />
               <Ionicons name="share-outline" size={18} color={COLORS.accent} />
-              <Text style={styles.actionLabel}>Share</Text>
+              <Text style={styles.actionLabel}>{t('friends.share')}</Text>
             </TouchableOpacity>
             <TouchableOpacity style={styles.actionBtn} onPress={handleSave} activeOpacity={0.75}>
               <BlurView intensity={20} tint="dark" style={StyleSheet.absoluteFill} />
               <View style={styles.actionBorder} />
               <Ionicons name="bookmark-outline" size={18} color={COLORS.warning} />
-              <Text style={styles.actionLabel}>Save</Text>
+              <Text style={styles.actionLabel}>{t('common.save')}</Text>
             </TouchableOpacity>
           </View>
         </ScrollView>

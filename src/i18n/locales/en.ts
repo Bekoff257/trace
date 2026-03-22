@@ -114,9 +114,9 @@ export default {
     title: 'Friends',
     sectionLabel: 'LOCATION SHARING',
     addFriend: 'Add Friend',
-    addPlaceholder: 'Name or invite code',
+    addPlaceholder: 'Search by @username',
     add: 'Add',
-    inviteLink: 'Invite Link',
+    inviteLink: 'Share your invite link',
     share: 'Share',
     pendingRequests: 'PENDING REQUESTS',
     accept: 'Accept',
@@ -136,6 +136,18 @@ export default {
     copyError: 'Could not copy invite link.',
     linkCopied: 'Invite link copied!',
     requestSent: 'Friend request sent!',
+    locationNotShared: 'Location not shared yet',
+    wantsToBeYourFriend: 'Wants to be your friend',
+    removeTitle: 'Remove {{name}}?',
+    removeBody: 'They will no longer see your location.',
+    connected: '{{count}} connected',
+    activeNow: 'Active now',
+    minutesAgo: '{{count}}m ago',
+    hoursAgo: '{{count}}h ago',
+    daysAgo: '{{count}}d ago',
+    notFound: 'User not found',
+    addFirstFriend: 'Add your first friend',
+    addFirstFriendSub: 'Search by @username or share your invite link to connect.',
   },
 
   // ── Auth screens ───────────────────────────────────────────────────────────
@@ -194,9 +206,13 @@ export default {
     visits: 'Visits',
     totalTime: 'Total time',
     firstVisit: 'First visit',
+    lastVisit: 'Last visit',
     avgDuration: 'Avg duration',
     noVisits: 'No visits recorded yet.',
     sectionLabel: 'PLACE DETAIL',
+    visitFrequency: 'VISIT FREQUENCY BY DAY',
+    directions: 'Directions',
+    notFound: 'Place not found',
   },
 
   // ── Insights ───────────────────────────────────────────────────────────────
@@ -210,5 +226,20 @@ export default {
   privacy: {
     title: 'Privacy',
     sectionLabel: 'PRIVACY CENTER',
+  },
+
+  // ── Username setup ─────────────────────────────────────────────────────────
+  username: {
+    sectionLabel: 'SETUP',
+    title: 'Choose a username',
+    subtitle: 'Your unique @username is how friends find you',
+    placeholder: '@yourname',
+    create: 'Create Username',
+    taken: 'Username already taken',
+    available: 'Username is available',
+    invalid: 'Only letters, numbers and underscores',
+    tooShort: 'Minimum 3 characters',
+    checking: 'Checking...',
+    skip: 'Skip for now',
   },
 } as const;
