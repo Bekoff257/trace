@@ -229,6 +229,9 @@ export default function ProfileScreen() {
               </View>
               <View style={styles.userInfo}>
                 <Text style={styles.userName}>{displayName}</Text>
+                {user?.username ? (
+                  <Text style={styles.userHandle}>@{user.username}</Text>
+                ) : null}
                 <Text style={styles.userEmail}>{email}</Text>
               </View>
               <TouchableOpacity style={styles.editBtn} onPress={handleEditProfile}>
@@ -432,7 +435,8 @@ const styles = StyleSheet.create({
   avatarInitial: { color: COLORS.textPrimary, fontSize: FONT.sizes.xl, fontWeight: FONT.weights.bold },
   userInfo: { flex: 1 },
   userName: { color: COLORS.textPrimary, fontSize: FONT.sizes.lg, fontWeight: FONT.weights.semibold },
-  userEmail: { color: COLORS.textMuted, fontSize: FONT.sizes.sm, marginTop: 2 },
+  userHandle: { color: COLORS.primary, fontSize: FONT.sizes.sm, marginTop: 1 },
+  userEmail: { color: COLORS.textMuted, fontSize: FONT.sizes.sm, marginTop: 1 },
   editBtn: { padding: SPACING.xs },
 
   groupTitle: {

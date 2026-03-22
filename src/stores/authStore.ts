@@ -70,7 +70,12 @@ export const useAuthStore = create<AuthState>((set) => ({
         isLoading: false,
       });
 
-      supabase.auth.onAuthStateChange(async (_event, session) => {
+      supabase.auth.onAuthStateChange(async (event, session) => {
+        // INITIAL_SESSION is already handled above by initialize() with the
+        // correct username. Skipping it prevents a second fetchUsername call
+        // that could wipe the username if the row hasn't been written yet.
+        if (event === 'INITIAL_SESSION') return;
+
         const mappedUser = session?.user ? mapSupabaseUser(session.user) : null;
         const username = session?.user?.id ? await fetchUsername(session.user.id) : undefined;
         set({
