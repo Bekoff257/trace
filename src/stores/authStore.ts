@@ -15,9 +15,10 @@ import type { Session } from '@supabase/supabase-js';
 // Authentication → Providers → Google settings.
 // Replace the placeholder below with your actual client ID.
 GoogleSignin.configure({
-  webClientId: '689110016323-fj6q4r2mftqkqpuh98jm86s1kcqf2i8m.apps.googleusercontent.com',
+  webClientId: '701703707394-2venplcj3c0rb7sdp0himvmdal08hi19.apps.googleusercontent.com',
   offlineAccess: false,
 });
+
 
 
 interface AuthState {
