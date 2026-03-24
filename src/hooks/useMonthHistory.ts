@@ -5,6 +5,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useAuthStore } from '@stores/authStore';
 import { getDailySummary } from '@services/localDB';
+import { computeAndSaveDailySummary } from '@services/summaryService';
 import type { DailySummary } from '@/types/index';
 
 interface MonthDay {
@@ -36,7 +37,18 @@ export function useMonthHistory(): UseMonthHistoryResult {
     setIsLoading(true);
 
     const today = new Date();
-    const todayStr = today.toISOString().slice(0, 10);
+    // Use local date components so the "today" marker is timezone-correct
+    const todayStr = [
+      today.getFullYear(),
+      String(today.getMonth() + 1).padStart(2, '0'),
+      String(today.getDate()).padStart(2, '0'),
+    ].join('-');
+
+    // Recompute summaries for any past day within the last 7 days that has
+    // no saved summary yet (happens when the app was closed overnight).
+    const sevenDaysAgo = new Date();
+    sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
+
     const daysInMonth = new Date(year, month + 1, 0).getDate();
 
     const loaded = await Promise.all(
@@ -46,7 +58,18 @@ export function useMonthHistory(): UseMonthHistoryResult {
         const dayDate = new Date(year, month, d);
         const isFuture = dayDate > today;
 
-        const summary = isFuture ? null : await getDailySummary(user.id, dateStr);
+        let summary: DailySummary | null = isFuture
+          ? null
+          : await getDailySummary(user.id, dateStr);
+
+        // For recent past days with no cached summary, compute it now.
+        // This catches days where the app was closed before summarising.
+        if (!isFuture && !summary && dayDate >= sevenDaysAgo && dateStr !== todayStr) {
+          const computed = await computeAndSaveDailySummary(user.id, dateStr);
+          // Only treat as real data if location points actually exist
+          summary = computed.pointsCount > 0 ? computed : null;
+        }
+
         return {
           date: dateStr,
           day: d,

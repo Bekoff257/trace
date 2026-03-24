@@ -10,10 +10,19 @@ export const TRACKING = {
   MEDIUM_INTERVAL_MS: 30_000,
   LOW_POWER_MIN_DISTANCE_M: 50,
   LOW_POWER_INTERVAL_MS: 300_000,
-  MOVING_SPEED_THRESHOLD_MS: 1.0,   // m/s — below this = possibly stationary
+  MOVING_SPEED_THRESHOLD_MS: 1.0,   // m/s — below this = stationary, skip
   MAX_STORED_POINTS: 300,           // in-memory buffer
   SYNC_INTERVAL_MS: 15 * 60 * 1000, // 15 minutes
   LOCAL_RETENTION_DAYS: 7,
+  // GPS filtering
+  ACCURACY_THRESHOLD_M: 20,         // reject points with accuracy worse than this
+  FREEZE_RADIUS_M: 5,               // hard freeze: always lock if dist < this (micro-jitter)
+  MIN_DISTANCE_M: 10,               // stationary zone: count consecutive readings < this
+  UNLOCK_DISTANCE_M: 15,            // must exceed this to exit stationary state (soft unlock)
+  STATIONARY_LOCK_COUNT: 3,         // consecutive stationary readings before locking position
+  THROTTLE_MS: 2500,                // minimum ms between evaluated points
+  MAX_JUMP_M: 100,                  // reject GPS glitches larger than this
+  SMOOTH_BUFFER_SIZE: 3,            // accepted-point buffer size for path smoothing
 } as const;
 
 // Daily goal defaults

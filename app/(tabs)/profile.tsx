@@ -178,14 +178,20 @@ export default function ProfileScreen() {
     if (!name || !user?.id) return;
     setIsSaving(true);
     try {
-      await supabase.auth.updateUser({ data: { display_name: name } });
-
       const profileUpdates: Record<string, any> = { display_name: name };
       if (newUsername && newUsername !== user.username && canChangeUsername && usernameStatus === 'available') {
         profileUpdates.username = newUsername;
         profileUpdates.username_updated_at = new Date().toISOString();
       }
-      await supabase.from('user_profiles').update(profileUpdates).eq('user_id', user.id);
+
+      const { error } = await supabase
+        .from('user_profiles')
+        .update(profileUpdates)
+        .eq('user_id', user.id);
+      if (error) throw error;
+
+      // Update auth metadata in background — non-blocking, never awaited
+      supabase.auth.updateUser({ data: { display_name: name } }).catch(() => {});
 
       updateProfile({
         displayName: name,

@@ -33,12 +33,22 @@ TaskManager.defineTask(TRACKING.BACKGROUND_TASK_NAME, async ({ data, error }: an
     if (!locations?.length) return;
 
     for (const loc of locations) {
-      const point = locationObjectToPoint(loc, _currentUserId);
-      if (!point) continue;
-      if (isTooClose(point.lat, point.lng, point.speed)) continue;
+      const raw = locationObjectToPoint(loc, _currentUserId);
+      if (!raw) continue;
+
+      // Step 1: Filter (no smoothing yet)
+      const result = evaluatePoint(raw.lat, raw.lng, raw.accuracy, loc.timestamp);
+      if (result === 'reject') continue;
+      // Always advance the throttle clock so subsequent points are evaluated
+      _lastAcceptedTime = loc.timestamp;
+      if (result === 'lock') continue; // stationary — keep marker at last position
+
+      // Step 2: Smooth only accepted points
+      const { lat, lng } = smoothAccepted(raw.lat, raw.lng);
+      const point = { ...raw, lat, lng };
       try {
-        _lastRecordedLat = point.lat;
-        _lastRecordedLng = point.lng;
+        _lastRecordedLat = lat;
+        _lastRecordedLng = lng;
         await insertLocationPoint(point);
         await processNewPoint(point);
         useLocationStore.getState().addPoint(point);
@@ -60,23 +70,161 @@ let _currentUserId = 'anonymous';
 let _locationSubscription: Location.LocationSubscription | null = null;
 let _lastRecordedLat: number | null = null;
 let _lastRecordedLng: number | null = null;
+let _lastAcceptedTime: number | null = null;
+let _stationaryCount = 0;
+// Explicit tracking state — drives soft-unlock threshold and UI stability
+type TrackingState = 'moving' | 'stationary';
+let _trackingState: TrackingState = 'moving';
+// Rolling buffer of ACCEPTED points only — never contains locked/rejected readings
+const _acceptedBuffer: Array<{ lat: number; lng: number }> = [];
+
+// ─── GPS Filtering ────────────────────────────────────────────────────────────
 
 function haversineMeters(lat1: number, lng1: number, lat2: number, lng2: number): number {
   const R = 6371000;
   const dLat = (lat2 - lat1) * Math.PI / 180;
   const dLng = (lng2 - lng1) * Math.PI / 180;
-  const a = Math.sin(dLat / 2) ** 2 +
+  const a =
+    Math.sin(dLat / 2) ** 2 +
     Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) * Math.sin(dLng / 2) ** 2;
   return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
 }
 
-/** Returns true if the point should be skipped (user hasn't moved enough). */
-function isTooClose(lat: number, lng: number, speed: number): boolean {
-  if (_lastRecordedLat == null || _lastRecordedLng == null) return false;
-  // Only apply the filter when clearly not moving
-  if (speed >= TRACKING.MOVING_SPEED_THRESHOLD_MS) return false;
+type FilterResult = 'accept' | 'lock' | 'reject';
+
+/**
+ * Production-grade GPS state machine filter.
+ *
+ * Pipeline order: RAW → evaluatePoint() → smoothAccepted() → save
+ * (smoothing only runs on 'accept', never on 'lock' or 'reject')
+ *
+ * State machine:
+ *
+ *   'moving' state
+ *     dist < FREEZE_RADIUS_M (5m)   → lock, count++; if count ≥ 3 → 'stationary'
+ *     dist < MIN_DISTANCE_M (10m)   → count++; if count ≥ 3 → lock + 'stationary', else accept
+ *     dist ≥ MIN_DISTANCE_M         → accept, reset count
+ *
+ *   'stationary' state
+ *     dist < UNLOCK_DISTANCE_M (15m) → lock (soft unlock: require stronger movement)
+ *     dist ≥ UNLOCK_DISTANCE_M       → seed buffer, transition to 'moving', accept
+ *
+ * Hard quality gates (always applied first, no state change):
+ *   accuracy > 20m  → reject
+ *   throttle < 2.5s → reject
+ *   dist > 100m     → reject (GPS glitch)
+ *
+ * Speed (coords.speed) is intentionally NOT used — unreliable/null on Android.
+ */
+function evaluatePoint(
+  lat: number,
+  lng: number,
+  accuracy: number,
+  timestamp: number,
+): FilterResult {
+  // ── Phase 1: Hard quality gates (no state mutation) ───────────────────────
+  if (accuracy > TRACKING.ACCURACY_THRESHOLD_M) return 'reject';
+  if (_lastAcceptedTime !== null && timestamp - _lastAcceptedTime < TRACKING.THROTTLE_MS) {
+    return 'reject';
+  }
+
+  // ── Phase 2: First point ever — accept to establish baseline ─────────────
+  if (_lastRecordedLat === null || _lastRecordedLng === null) return 'accept';
+
   const dist = haversineMeters(_lastRecordedLat, _lastRecordedLng, lat, lng);
-  return dist < TRACKING.MEDIUM_MIN_DISTANCE_M;
+
+  // GPS glitch — reject implausibly large jumps
+  if (dist > TRACKING.MAX_JUMP_M) return 'reject';
+
+  // ── Phase 3: State machine ────────────────────────────────────────────────
+
+  if (_trackingState === 'stationary') {
+    // Soft unlock: require UNLOCK_DISTANCE_M to exit stationary state.
+    // This prevents walking-start jitter (< 15 m movements while waking up GPS).
+    if (dist < TRACKING.UNLOCK_DISTANCE_M) return 'lock';
+
+    // User has genuinely moved — transition to moving.
+    // Seed smooth buffer with locked position so first step blends in smoothly
+    // instead of snapping from old position to new one.
+    _trackingState = 'moving';
+    _stationaryCount = 0;
+    seedSmoothBuffer(_lastRecordedLat, _lastRecordedLng);
+    return 'accept';
+  }
+
+  // _trackingState === 'moving'
+
+  // Hard freeze: micro-movement under 5 m — lock and count toward stationary
+  if (dist < TRACKING.FREEZE_RADIUS_M) {
+    _stationaryCount++;
+    if (_stationaryCount >= TRACKING.STATIONARY_LOCK_COUNT) _trackingState = 'stationary';
+    return 'lock';
+  }
+
+  // Stationary zone: small movement under 10 m
+  if (dist < TRACKING.MIN_DISTANCE_M) {
+    _stationaryCount++;
+    if (_stationaryCount >= TRACKING.STATIONARY_LOCK_COUNT) {
+      _trackingState = 'stationary';
+      return 'lock';
+    }
+    // Count not yet reached — allow point through (movement is ambiguous)
+    return 'accept';
+  }
+
+  // Clear movement — reset stationary counter
+  _stationaryCount = 0;
+  return 'accept';
+}
+
+/**
+ * Pre-fills the smooth buffer with the locked position before the first
+ * accepted point after a stationary→moving transition.
+ * This blends the new position gradually from the lock point instead of
+ * snapping the marker instantly across the gap.
+ */
+function seedSmoothBuffer(lat: number, lng: number): void {
+  _acceptedBuffer.length = 0;
+  for (let i = 0; i < TRACKING.SMOOTH_BUFFER_SIZE - 1; i++) {
+    _acceptedBuffer.push({ lat, lng });
+  }
+}
+
+/**
+ * Exponentially weighted average of the last SMOOTH_BUFFER_SIZE accepted points.
+ * Newest point carries the highest weight, so the path follows real movement
+ * closely while still suppressing single-sample jitter.
+ *
+ * Weight progression (buffer size 3): index 0 = 1×, 1 = 2×, 2 = 4×
+ * → newest point drives ~57% of the output position.
+ *
+ * Only ever called with accepted points — locked/rejected readings are never
+ * added to this buffer.
+ */
+function smoothAccepted(lat: number, lng: number): { lat: number; lng: number } {
+  _acceptedBuffer.push({ lat, lng });
+  if (_acceptedBuffer.length > TRACKING.SMOOTH_BUFFER_SIZE) _acceptedBuffer.shift();
+  if (_acceptedBuffer.length < 2) return { lat, lng };
+
+  let totalWeight = 0;
+  let sumLat = 0;
+  let sumLng = 0;
+  for (let i = 0; i < _acceptedBuffer.length; i++) {
+    const w = Math.pow(2, i); // 1, 2, 4 — oldest to newest
+    sumLat += _acceptedBuffer[i].lat * w;
+    sumLng += _acceptedBuffer[i].lng * w;
+    totalWeight += w;
+  }
+  return { lat: sumLat / totalWeight, lng: sumLng / totalWeight };
+}
+
+function resetFilterState(): void {
+  _lastRecordedLat = null;
+  _lastRecordedLng = null;
+  _lastAcceptedTime = null;
+  _stationaryCount = 0;
+  _trackingState = 'moving';
+  _acceptedBuffer.length = 0;
 }
 
 export function setTrackingUserId(userId: string): void {
@@ -165,9 +313,12 @@ function getTrackingParams() {
   const mode = useLocationStore.getState().mode;
   const isLowPower = mode === 'low_power';
   return {
-    accuracy: isLowPower ? Location.Accuracy.Low : Location.Accuracy.Balanced,
-    distanceInterval: isLowPower ? TRACKING.LOW_POWER_MIN_DISTANCE_M : TRACKING.MEDIUM_MIN_DISTANCE_M,
-    timeInterval: isLowPower ? TRACKING.LOW_POWER_INTERVAL_MS : TRACKING.MEDIUM_INTERVAL_MS,
+    // Highest accuracy in normal mode for clean GPS fix; Low for battery saver
+    accuracy: isLowPower ? Location.Accuracy.Low : Location.Accuracy.Highest,
+    // Small distanceInterval so the OS delivers points frequently — our own
+    // shouldAcceptPoint filter is the real gatekeeper, not the OS threshold.
+    distanceInterval: isLowPower ? TRACKING.LOW_POWER_MIN_DISTANCE_M : 5,
+    timeInterval: isLowPower ? TRACKING.LOW_POWER_INTERVAL_MS : TRACKING.THROTTLE_MS,
   };
 }
 
@@ -178,13 +329,21 @@ async function startForegroundTracking(): Promise<void> {
     getTrackingParams(),
     async (loc) => {
       try {
-        // Skip jittery indoor points — accuracy > 30m means unreliable fix
-        if ((loc.coords.accuracy ?? 999) > 30) return;
-        const point = locationObjectToPoint(loc, _currentUserId);
-        if (!point) return;
-        if (isTooClose(point.lat, point.lng, point.speed)) return;
-        _lastRecordedLat = point.lat;
-        _lastRecordedLng = point.lng;
+        const raw = locationObjectToPoint(loc, _currentUserId);
+        if (!raw) return;
+
+        // Step 1: Filter (no smoothing yet)
+        const result = evaluatePoint(raw.lat, raw.lng, raw.accuracy, loc.timestamp);
+        if (result === 'reject') return;
+        // Always advance the throttle clock so subsequent points are evaluated
+        _lastAcceptedTime = loc.timestamp;
+        if (result === 'lock') return; // stationary — keep marker at last position
+
+        // Step 2: Smooth only accepted points
+        const { lat, lng } = smoothAccepted(raw.lat, raw.lng);
+        const point = { ...raw, lat, lng };
+        _lastRecordedLat = lat;
+        _lastRecordedLng = lng;
         await insertLocationPoint(point);
         await processNewPoint(point);
         useLocationStore.getState().addPoint(point);
@@ -199,8 +358,7 @@ async function startForegroundTracking(): Promise<void> {
 async function stopForegroundTracking(): Promise<void> {
   _locationSubscription?.remove();
   _locationSubscription = null;
-  _lastRecordedLat = null;
-  _lastRecordedLng = null;
+  resetFilterState();
 }
 
 // ─── Background tracking ──────────────────────────────────────────────────────

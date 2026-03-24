@@ -1,9 +1,23 @@
 import { create } from 'zustand';
-import { makeRedirectUri } from 'expo-auth-session';
-import * as WebBrowser from 'expo-web-browser';
+import {
+  GoogleSignin,
+  isSuccessResponse,
+  isErrorWithCode,
+  statusCodes,
+} from '@react-native-google-signin/google-signin';
 import { supabase } from '@services/supabaseClient';
 import type { User } from '@/types/index';
 import type { Session } from '@supabase/supabase-js';
+
+// ─── Google Sign-In configuration ────────────────────────────────────────────
+// webClientId: OAuth 2.0 "Web application" client ID from Google Cloud Console.
+// It must match the client ID registered in your Supabase project's
+// Authentication → Providers → Google settings.
+// Replace the placeholder below with your actual client ID.
+GoogleSignin.configure({
+  webClientId: '689110016323-fj6q4r2mftqkqpuh98jm86s1kcqf2i8m.apps.googleusercontent.com',
+  offlineAccess: false,
+});
 
 
 interface AuthState {
@@ -134,35 +148,41 @@ export const useAuthStore = create<AuthState>((set) => ({
   signInWithGoogle: async () => {
     set({ isLoading: true, error: null });
     try {
-      const redirectTo = makeRedirectUri({ scheme: 'locationtracker', path: 'auth/callback' });
+      // Ensure Google Play Services are available (Android only — no-op on iOS)
+      await GoogleSignin.hasPlayServices({ showPlayServicesUpdateDialog: true });
 
-      const { data, error } = await supabase.auth.signInWithOAuth({
+      // Opens the native Google account picker — no browser, no deep links
+      const response = await GoogleSignin.signIn();
+
+      if (!isSuccessResponse(response)) {
+        // User dismissed the picker without selecting an account
+        set({ isLoading: false });
+        return;
+      }
+
+      const idToken = response.data.idToken;
+      if (!idToken) throw new Error('Google Sign-In returned no ID token');
+
+      // Exchange the Google ID token for a Supabase session
+      const { data, error } = await supabase.auth.signInWithIdToken({
         provider: 'google',
-        options: { redirectTo, skipBrowserRedirect: true },
+        token: idToken,
       });
       if (error) throw error;
 
-      // Open the OAuth URL — on Android the deep link handler in _layout.tsx
-      // will call setSession when the redirect URL arrives, which fires
-      // onAuthStateChange. We just need to wait for the browser to close.
-      await WebBrowser.openAuthSessionAsync(data.url ?? '', redirectTo);
-
-      // After browser closes, check the current session (covers all platforms/flows)
-      const { data: { session } } = await supabase.auth.getSession();
-      if (session) {
-        const username = await fetchUsername(session.user.id);
-        set({
-          session,
-          user: { ...mapSupabaseUser(session.user), username },
-          isLoading: false,
-        });
-      } else {
-        // Browser was dismissed / cancelled — onAuthStateChange will handle
-        // the session if the Linking handler fires later
-        set({ isLoading: false });
-      }
+      const username = data.user?.id ? await fetchUsername(data.user.id) : undefined;
+      set({
+        session: data.session,
+        user: data.user ? { ...mapSupabaseUser(data.user), username } : null,
+        isLoading: false,
+      });
     } catch (err: any) {
-      set({ isLoading: false, error: err.message ?? 'Google sign in failed' });
+      if (isErrorWithCode(err) && err.code === statusCodes.SIGN_IN_CANCELLED) {
+        // User cancelled — not an error worth showing
+        set({ isLoading: false });
+      } else {
+        set({ isLoading: false, error: err.message ?? 'Google sign in failed' });
+      }
     }
   },
 

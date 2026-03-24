@@ -1,0 +1,7 @@
+1. Map Zig-Zag, drawing random lines on random roads while i'm moving.
+
+2. Not exactly drawing the lines on roads shape.
+
+3. Google Sign-in. After Signing with Google it keeps stuck on Loading unitll i relaunch the app.
+
+4. 

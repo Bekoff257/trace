@@ -146,34 +146,38 @@ export default function HistoryScreen() {
               </View>
             )}
 
-            {/* Selected day preview */}
-            {selectedDay?.summary && (
+            {/* Selected day preview — always shown for non-future selected days */}
+            {selectedDay && !selectedDay.isFuture && (
               <View style={styles.dayPreview}>
                 <View style={styles.dayPreviewDivider} />
-                <View style={styles.dayPreviewRow}>
-                  <View style={styles.dayPreviewStat}>
-                    <Text style={styles.dayPreviewValue}>
-                      {(selectedDay.summary.totalDistanceM / 1609.34).toFixed(1)}
-                    </Text>
-                    <Text style={styles.dayPreviewLabel}>{t('history.miles')}</Text>
+                {selectedDay.summary ? (
+                  <View style={styles.dayPreviewRow}>
+                    <View style={styles.dayPreviewStat}>
+                      <Text style={styles.dayPreviewValue}>
+                        {(selectedDay.summary.totalDistanceM / 1609.34).toFixed(1)}
+                      </Text>
+                      <Text style={styles.dayPreviewLabel}>{t('history.miles')}</Text>
+                    </View>
+                    <View style={styles.dayPreviewStat}>
+                      <Text style={styles.dayPreviewValue}>{selectedDay.summary.placesVisited}</Text>
+                      <Text style={styles.dayPreviewLabel}>{t('history.places')}</Text>
+                    </View>
+                    <View style={styles.dayPreviewStat}>
+                      <Text style={styles.dayPreviewValue}>
+                        {(selectedDay.summary.stepsEstimated / 1000).toFixed(1)}k
+                      </Text>
+                      <Text style={styles.dayPreviewLabel}>{t('history.steps')}</Text>
+                    </View>
+                    <View style={styles.dayPreviewStat}>
+                      <Text style={styles.dayPreviewValue}>
+                        {Math.floor(selectedDay.summary.timeOutsideMin / 60)}h
+                      </Text>
+                      <Text style={styles.dayPreviewLabel}>{t('history.active')}</Text>
+                    </View>
                   </View>
-                  <View style={styles.dayPreviewStat}>
-                    <Text style={styles.dayPreviewValue}>{selectedDay.summary.placesVisited}</Text>
-                    <Text style={styles.dayPreviewLabel}>{t('history.places')}</Text>
-                  </View>
-                  <View style={styles.dayPreviewStat}>
-                    <Text style={styles.dayPreviewValue}>
-                      {(selectedDay.summary.stepsEstimated / 1000).toFixed(1)}k
-                    </Text>
-                    <Text style={styles.dayPreviewLabel}>{t('history.steps')}</Text>
-                  </View>
-                  <View style={styles.dayPreviewStat}>
-                    <Text style={styles.dayPreviewValue}>
-                      {Math.floor(selectedDay.summary.timeOutsideMin / 60)}h
-                    </Text>
-                    <Text style={styles.dayPreviewLabel}>{t('history.active')}</Text>
-                  </View>
-                </View>
+                ) : (
+                  <Text style={styles.dayPreviewEmpty}>{t('history.noData')}</Text>
+                )}
               </View>
             )}
           </View>
@@ -302,6 +306,7 @@ const styles = StyleSheet.create({
   dayPreviewStat: { alignItems: 'center' },
   dayPreviewValue: { color: COLORS.textPrimary, fontSize: FONT.sizes.lg, fontWeight: FONT.weights.bold },
   dayPreviewLabel: { color: COLORS.textMuted, fontSize: FONT.sizes.xs, marginTop: 2 },
+  dayPreviewEmpty: { color: COLORS.textMuted, fontSize: FONT.sizes.sm, textAlign: 'center', paddingVertical: SPACING.xs },
 
   recentTitle: {
     color: COLORS.textMuted,
