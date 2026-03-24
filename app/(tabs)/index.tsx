@@ -30,6 +30,8 @@ import SectionLabel from '@components/ui/SectionLabel';
 import LiveIndicator from '@components/ui/LiveIndicator';
 import ProgressBar from '@components/ui/ProgressBar';
 import RouteLayer from '@components/map/RouteLayer';
+import FootstepsLayer from '@components/map/FootstepsLayer';
+import { snapToRoads, type LatLng } from '@services/roadSnapper';
 import VisitMarker from '@components/map/VisitMarker';
 import FriendMarker from '@components/map/FriendMarker';
 
@@ -49,7 +51,7 @@ function formatDuration(minutes: number): string {
 
 export default function HomeScreen() {
   const { user } = useAuthStore();
-  const { isTracking, currentSession, recentPoints, lastPoint } = useLocationStore();
+  const { isTracking, currentSession, recentPoints, lastPoint, trailStyle, setTrailStyle } = useLocationStore();
   const { friends } = useFriendsStore();
   const { summary, distanceMi, progressToGoal } = useDailySummary();
   const { sessions } = useTimeline();
@@ -91,7 +93,7 @@ export default function HomeScreen() {
   const placesVisited = summary?.placesVisited ?? sessions.length;
 
   // Filter consecutive points < 8m apart to remove GPS jitter from the visual route
-  const routeCoords = recentPoints.reduce<Array<{ latitude: number; longitude: number }>>((acc, p) => {
+  const routeCoords = recentPoints.reduce<LatLng[]>((acc, p) => {
     if (acc.length === 0) { acc.push({ latitude: p.lat, longitude: p.lng }); return acc; }
     const prev = acc[acc.length - 1];
     const dLat = (p.lat - prev.latitude) * Math.PI / 180;
@@ -101,6 +103,26 @@ export default function HomeScreen() {
     if (dist >= 8) acc.push({ latitude: p.lat, longitude: p.lng });
     return acc;
   }, []);
+
+  // Road-snapped version of the route (updated 3 s after the last new GPS point)
+  const [snappedCoords, setSnappedCoords] = useState<LatLng[]>([]);
+  const routeCoordsRef = useRef(routeCoords);
+  routeCoordsRef.current = routeCoords;
+  const snapTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  useEffect(() => {
+    if (snapTimerRef.current) clearTimeout(snapTimerRef.current);
+    if (routeCoords.length < 2) { setSnappedCoords([]); return; }
+    snapTimerRef.current = setTimeout(() => {
+      snapToRoads(routeCoordsRef.current)
+        .then(setSnappedCoords)
+        .catch(() => {});
+    }, 3000);
+    return () => { if (snapTimerRef.current) clearTimeout(snapTimerRef.current); };
+  }, [recentPoints.length]); // re-snap 3 s after each new GPS point arrives
+
+  // Use road-snapped path for display; fall back to raw GPS while snapping is pending
+  const displayCoords = snappedCoords.length >= 2 ? snappedCoords : routeCoords;
 
   const fadeAnim = useRef(new Animated.Value(0)).current;
   const slideAnim = useRef(new Animated.Value(24)).current;
@@ -199,7 +221,10 @@ export default function HomeScreen() {
                   zoom={13}
                 />
                 {isTracking && <UserLocation />}
-                <RouteLayer allCoords={routeCoords} visibleCoords={routeCoords} />
+                {trailStyle === 'lines'
+  ? <RouteLayer allCoords={displayCoords} visibleCoords={displayCoords} />
+  : <FootstepsLayer coords={displayCoords} />
+}
                 {sessions.slice(0, 5).map((s) => (
                   <VisitMarker
                     key={s.id}
@@ -232,6 +257,21 @@ export default function HomeScreen() {
                   <LiveIndicator label={t('home.tapToStart')} color={COLORS.textMuted} />
                 )}
               </View>
+
+              {/* Trail style toggle */}
+              <TouchableOpacity
+                style={styles.trailToggleBtn}
+                onPress={() => setTrailStyle(trailStyle === 'lines' ? 'footsteps' : 'lines')}
+                activeOpacity={0.8}
+              >
+                <BlurView intensity={60} tint="dark" style={StyleSheet.absoluteFill} />
+                <View style={styles.expandBorder} />
+                <Ionicons
+                  name={trailStyle === 'lines' ? 'footsteps-outline' : 'remove-outline'}
+                  size={16}
+                  color={COLORS.accent}
+                />
+              </TouchableOpacity>
 
               {/* Expand button */}
               <TouchableOpacity
@@ -349,7 +389,10 @@ export default function HomeScreen() {
               zoom={14}
             />
             {isTracking && <UserLocation />}
-            <RouteLayer allCoords={routeCoords} visibleCoords={routeCoords} />
+            {trailStyle === 'lines'
+  ? <RouteLayer allCoords={displayCoords} visibleCoords={displayCoords} />
+  : <FootstepsLayer coords={displayCoords} />
+}
             {sessions.slice(0, 5).map((s) => (
               <VisitMarker
                 key={s.id}
@@ -463,6 +506,11 @@ const styles = StyleSheet.create({
     borderRadius: RADIUS.full, overflow: 'hidden',
   },
   mapLiveBorder: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, borderRadius: RADIUS.full, borderWidth: 1, borderColor: COLORS.border },
+  trailToggleBtn: {
+    position: 'absolute', top: SPACING.sm, right: SPACING.sm + 34 + SPACING.xs,
+    width: 34, height: 34, borderRadius: RADIUS.md, overflow: 'hidden',
+    backgroundColor: COLORS.glass, alignItems: 'center', justifyContent: 'center',
+  },
   expandBtn: {
     position: 'absolute', top: SPACING.sm, right: SPACING.sm,
     width: 34, height: 34, borderRadius: RADIUS.md, overflow: 'hidden',

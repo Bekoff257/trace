@@ -1,12 +1,16 @@
 import { create } from 'zustand';
 import type { LocationPoint, VisitSession, TrackingState, TrackingMode } from '@/types/index';
 
+export type TrailStyle = 'lines' | 'footsteps';
+
 interface LocationState extends TrackingState {
   recentPoints: LocationPoint[];
   activeSessions: VisitSession[];
+  trailStyle: TrailStyle;
 
   setTracking: (isTracking: boolean) => void;
   setTrackingMode: (mode: TrackingMode) => void;
+  setTrailStyle: (style: TrailStyle) => void;
   addPoint: (point: LocationPoint) => void;
   setCurrentSession: (session: VisitSession | undefined) => void;
   endSession: (sessionId: string, endedAt: string) => void;
@@ -16,6 +20,7 @@ interface LocationState extends TrackingState {
 export const useLocationStore = create<LocationState>((set, get) => ({
   isTracking: false,
   mode: 'medium',
+  trailStyle: 'lines',
   lastPoint: undefined,
   currentSession: undefined,
   batteryLevel: undefined,
@@ -25,6 +30,8 @@ export const useLocationStore = create<LocationState>((set, get) => ({
   setTracking: (isTracking) => set({ isTracking }),
 
   setTrackingMode: (mode) => set({ mode }),
+
+  setTrailStyle: (trailStyle) => set({ trailStyle }),
 
   addPoint: (point) =>
     set((state) => ({
