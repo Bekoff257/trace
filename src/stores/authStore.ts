@@ -86,10 +86,12 @@ export const useAuthStore = create<AuthState>((set) => ({
       });
 
       supabase.auth.onAuthStateChange(async (event, session) => {
-        // INITIAL_SESSION is already handled above by initialize() with the
-        // correct username. Skipping it prevents a second fetchUsername call
-        // that could wipe the username if the row hasn't been written yet.
-        if (event === 'INITIAL_SESSION') return;
+        // INITIAL_SESSION is handled by initialize() above.
+        // SIGNED_OUT is handled synchronously by signOut() — skipping it
+        // prevents a race where the async supabase.auth.signOut() fires its
+        // event AFTER a new Google sign-in has already started, resetting
+        // session/user mid-login and causing a redirect loop.
+        if (event === 'INITIAL_SESSION' || event === 'SIGNED_OUT') return;
 
         const mappedUser = session?.user ? mapSupabaseUser(session.user) : null;
         const username = session?.user?.id ? await fetchUsername(session.user.id) : undefined;

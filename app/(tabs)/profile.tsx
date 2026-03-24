@@ -143,13 +143,18 @@ export default function ProfileScreen() {
     setIsCheckingUsername(true);
     setUsernameStatus('idle');
     debounceRef.current = setTimeout(async () => {
-      const { data } = await supabase
-        .from('user_profiles')
-        .select('user_id')
-        .eq('username', trimmed)
-        .maybeSingle();
-      setIsCheckingUsername(false);
-      setUsernameStatus(data ? 'taken' : 'available');
+      try {
+        const { data } = await supabase
+          .from('user_profiles')
+          .select('user_id')
+          .eq('username', trimmed)
+          .maybeSingle();
+        setIsCheckingUsername(false);
+        setUsernameStatus(data ? 'taken' : 'available');
+      } catch {
+        setIsCheckingUsername(false);
+        setUsernameStatus('idle');
+      }
     }, 500);
 
     return () => { if (debounceRef.current) clearTimeout(debounceRef.current); };
