@@ -265,12 +265,15 @@ export default function HomeScreen() {
                 activeOpacity={0.8}
               >
                 <BlurView intensity={60} tint="dark" style={StyleSheet.absoluteFill} />
-                <View style={styles.expandBorder} />
+                <View style={styles.trailToggleBtnBorder} />
                 <Ionicons
                   name={trailStyle === 'lines' ? 'footsteps-outline' : 'remove-outline'}
-                  size={16}
+                  size={14}
                   color={COLORS.accent}
                 />
+                <Text style={styles.trailToggleLabel}>
+                  {trailStyle === 'lines' ? 'Footsteps' : 'Lines'}
+                </Text>
               </TouchableOpacity>
 
               {/* Expand button */}
@@ -507,9 +510,22 @@ const styles = StyleSheet.create({
   },
   mapLiveBorder: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, borderRadius: RADIUS.full, borderWidth: 1, borderColor: COLORS.border },
   trailToggleBtn: {
-    position: 'absolute', top: SPACING.sm, right: SPACING.sm + 34 + SPACING.xs,
-    width: 34, height: 34, borderRadius: RADIUS.md, overflow: 'hidden',
-    backgroundColor: COLORS.glass, alignItems: 'center', justifyContent: 'center',
+    position: 'absolute', bottom: SPACING.md, right: SPACING.md,
+    flexDirection: 'row', alignItems: 'center', gap: 6,
+    paddingHorizontal: 10, paddingVertical: 6,
+    borderRadius: RADIUS.full, overflow: 'hidden',
+    backgroundColor: COLORS.glass,
+  },
+  trailToggleBtnBorder: {
+    ...StyleSheet.absoluteFillObject,
+    borderRadius: RADIUS.full,
+    borderWidth: 1,
+    borderColor: COLORS.accent + '60',
+  },
+  trailToggleLabel: {
+    color: COLORS.accent,
+    fontSize: FONT.sizes.xs,
+    fontWeight: FONT.weights.semibold,
   },
   expandBtn: {
     position: 'absolute', top: SPACING.sm, right: SPACING.sm,
