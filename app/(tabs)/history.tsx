@@ -20,9 +20,16 @@ function dotIntensity(distanceM: number): 'high' | 'mid' | 'low' {
 export default function HistoryScreen() {
   const { t, i18n } = useTranslation();
   const { days, isLoading, year, month, goToPrevMonth, goToNextMonth } = useMonthHistory();
-  const [selectedDate, setSelectedDate] = useState<string | null>(
-    new Date().toISOString().slice(0, 10)
-  );
+  // Use local date (not UTC) so "today" is always correct regardless of timezone
+  function localDateString(d = new Date()) {
+    return [
+      d.getFullYear(),
+      String(d.getMonth() + 1).padStart(2, '0'),
+      String(d.getDate()).padStart(2, '0'),
+    ].join('-');
+  }
+
+  const [selectedDate, setSelectedDate] = useState<string | null>(localDateString());
 
   const monthName = new Date(year, month).toLocaleDateString(i18n.language, {
     month: 'long',
@@ -61,7 +68,7 @@ export default function HistoryScreen() {
             </View>
             <TouchableOpacity
               style={styles.todayBtn}
-              onPress={() => setSelectedDate(new Date().toISOString().slice(0, 10))}
+              onPress={() => setSelectedDate(localDateString())}
             >
               <Text style={styles.todayBtnText}>{t('history.today')}</Text>
             </TouchableOpacity>
@@ -74,11 +81,11 @@ export default function HistoryScreen() {
 
             {/* Month nav */}
             <View style={styles.monthNav}>
-              <TouchableOpacity onPress={goToPrevMonth} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+              <TouchableOpacity onPress={() => { setSelectedDate(null); goToPrevMonth(); }} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
                 <Ionicons name="chevron-back" size={20} color={COLORS.textSecondary} />
               </TouchableOpacity>
               <Text style={styles.monthTitle}>{monthName}</Text>
-              <TouchableOpacity onPress={goToNextMonth} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+              <TouchableOpacity onPress={() => { setSelectedDate(null); goToNextMonth(); }} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
                 <Ionicons name="chevron-forward" size={20} color={COLORS.textSecondary} />
               </TouchableOpacity>
             </View>

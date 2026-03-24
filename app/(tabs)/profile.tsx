@@ -388,10 +388,10 @@ export default function ProfileScreen() {
                 <Text style={styles.modalBtnCancel}>{t('common.cancel')}</Text>
               </TouchableOpacity>
               <TouchableOpacity
-                style={[styles.modalBtn, styles.modalBtnSave, isSaving && styles.modalBtnDisabled]}
+                style={[styles.modalBtn, styles.modalBtnSave, (isSaving || isCheckingUsername) && styles.modalBtnDisabled]}
                 onPress={handleSaveProfile}
                 activeOpacity={0.7}
-                disabled={isSaving}
+                disabled={isSaving || isCheckingUsername}
               >
                 <Text style={styles.modalBtnSaveText}>{isSaving ? t('common.loading') : t('common.save')}</Text>
               </TouchableOpacity>

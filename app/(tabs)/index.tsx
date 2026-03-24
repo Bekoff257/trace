@@ -90,7 +90,17 @@ export default function HomeScreen() {
   const timeOutside = summary ? formatDuration(summary.timeOutsideMin) : '—';
   const placesVisited = summary?.placesVisited ?? sessions.length;
 
-  const routeCoords = recentPoints.map((p) => ({ latitude: p.lat, longitude: p.lng }));
+  // Filter consecutive points < 8m apart to remove GPS jitter from the visual route
+  const routeCoords = recentPoints.reduce<Array<{ latitude: number; longitude: number }>>((acc, p) => {
+    if (acc.length === 0) { acc.push({ latitude: p.lat, longitude: p.lng }); return acc; }
+    const prev = acc[acc.length - 1];
+    const dLat = (p.lat - prev.latitude) * Math.PI / 180;
+    const dLng = (p.lng - prev.longitude) * Math.PI / 180;
+    const a = Math.sin(dLat / 2) ** 2 + Math.cos(prev.latitude * Math.PI / 180) * Math.cos(p.lat * Math.PI / 180) * Math.sin(dLng / 2) ** 2;
+    const dist = 6371000 * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+    if (dist >= 8) acc.push({ latitude: p.lat, longitude: p.lng });
+    return acc;
+  }, []);
 
   const fadeAnim = useRef(new Animated.Value(0)).current;
   const slideAnim = useRef(new Animated.Value(24)).current;
