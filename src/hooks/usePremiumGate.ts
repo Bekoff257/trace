@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { usePlanStore } from '@stores/planStore';
 import { isPremiumFeature, type PremiumFeature } from '@constants/features';
-import PaywallModal from '@components/ui/PaywallModal';
+import PaywallScreen from '@components/ui/PaywallScreen';
 
 export function usePremiumGate() {
   const { userPlan } = usePlanStore();
@@ -21,7 +21,7 @@ export function usePremiumGate() {
     setVisible(true);
   }
 
-  const paywallElement = React.createElement(PaywallModal, {
+  const paywallElement = React.createElement(PaywallScreen, {
     visible,
     onClose: () => setVisible(false),
   });

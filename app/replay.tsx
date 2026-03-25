@@ -26,7 +26,7 @@ import { router } from 'expo-router';
 import { useRouteReplay, type PlaybackSpeed } from '@hooks/useRouteReplay';
 import RouteLayer from '@components/map/RouteLayer';
 import VisitMarker from '@components/map/VisitMarker';
-import PaywallModal from '@components/ui/PaywallModal';
+import PaywallScreen from '@components/ui/PaywallScreen';
 import { usePlanStore } from '@stores/planStore';
 import { MAP_STYLE } from '@constants/mapStyle';
 import { COLORS, FONT, SPACING, RADIUS, SHADOWS } from '@constants/theme';
@@ -374,7 +374,7 @@ export default function ReplayScreen() {
         </View>
       </SafeAreaView>
 
-      <PaywallModal visible={paywallVisible} onClose={() => setPaywallVisible(false)} />
+      <PaywallScreen visible={paywallVisible} onClose={() => setPaywallVisible(false)} />
 
       {/* ── Controls panel ── */}
       <View style={[styles.panel, { paddingBottom: safeBottom + SPACING.md }]}>

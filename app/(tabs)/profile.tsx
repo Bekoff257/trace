@@ -10,7 +10,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useAuthStore } from '@stores/authStore';
 import { useLocationStore } from '@stores/locationStore';
 import { usePlanStore } from '@stores/planStore';
-import PaywallModal from '@components/ui/PaywallModal';
+import PaywallScreen from '@components/ui/PaywallScreen';
 import { supabase } from '@services/supabaseClient';
 import { COLORS, FONT, SPACING, RADIUS, GRADIENTS } from '@constants/theme';
 import SectionLabel from '@components/ui/SectionLabel';
@@ -437,7 +437,7 @@ export default function ProfileScreen() {
           </View>
         </View>
       </Modal>
-      <PaywallModal visible={paywallVisible} onClose={() => setPaywallVisible(false)} />
+      <PaywallScreen visible={paywallVisible} onClose={() => setPaywallVisible(false)} />
     </View>
   );
 }
