@@ -493,7 +493,7 @@ export default function HomeScreen() {
             activeOpacity={0.8}
           >
             <BlurView intensity={60} tint="dark" style={StyleSheet.absoluteFill} />
-            <View style={[styles.mapIconBtnBorder, is3D && styles.mapIconBtnBorderActive]} />
+            <View style={[styles.mapIconBtnBorder, styles.fsThreeDBtnBorder, is3D && styles.mapIconBtnBorderActive]} />
             <Text style={[styles.threeDLabel, is3D && styles.threeDLabelActive]}>3D</Text>
           </TouchableOpacity>
         </View>
@@ -693,6 +693,9 @@ const styles = StyleSheet.create({
     position: 'absolute', bottom: 160, right: SPACING.md,
     width: 44, height: 44, borderRadius: RADIUS.full,
     backgroundColor: 'rgba(0,0,0,0.5)',
+  },
+  fsThreeDBtnBorder: {
+    borderRadius: RADIUS.full,
   },
   threeDLabel: {
     color: COLORS.textSecondary,
