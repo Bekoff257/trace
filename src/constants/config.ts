@@ -18,10 +18,10 @@ export const TRACKING = {
   ACCURACY_THRESHOLD_M: 20,         // reject points with accuracy worse than this
   FREEZE_RADIUS_M: 5,               // hard freeze: always lock if dist < this (micro-jitter)
   MIN_DISTANCE_M: 10,               // stationary zone: count consecutive readings < this
-  UNLOCK_DISTANCE_M: 15,            // must exceed this to exit stationary state (soft unlock)
+  UNLOCK_DISTANCE_M: 30,            // must exceed this to exit stationary state — raised from 15 to prevent GPS drift unlocks
   STATIONARY_LOCK_COUNT: 3,         // consecutive stationary readings before locking position
   THROTTLE_MS: 2500,                // minimum ms between evaluated points
-  MAX_JUMP_M: 100,                  // reject GPS glitches larger than this
+  MAX_JUMP_M: 60,                   // reject GPS glitches larger than this — lowered from 100 to cut wild jumps
   SMOOTH_BUFFER_SIZE: 3,            // accepted-point buffer size for path smoothing
 } as const;
 

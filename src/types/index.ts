@@ -89,6 +89,7 @@ export interface FriendProfile {
   userId: string;
   displayName: string;
   avatarUrl?: string;
+  username?: string;
 }
 
 export interface Friend extends FriendProfile {

@@ -52,6 +52,15 @@ export default function LiveTimelineScreen() {
           <View style={styles.headerActions}>
             <TouchableOpacity
               style={styles.iconBtn}
+              onPress={() => router.push('/replay' as any)}
+              activeOpacity={0.75}
+            >
+              <BlurView intensity={50} tint="dark" style={StyleSheet.absoluteFill} />
+              <View style={styles.iconBtnBorder} />
+              <Ionicons name="play-circle-outline" size={18} color={COLORS.accent} />
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={styles.iconBtn}
               onPress={() => router.push('/(tabs)/history')}
               activeOpacity={0.75}
             >

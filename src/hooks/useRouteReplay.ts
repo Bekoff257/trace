@@ -28,6 +28,12 @@ interface UseRouteReplayResult {
   currentIndex: number;
   totalPoints: number;
   speed: PlaybackSpeed;
+  /** ISO timestamp of the currently-playing point */
+  currentTime: string | null;
+  /** ISO timestamp of the first point */
+  startTime: string | null;
+  /** ISO timestamp of the last point */
+  endTime: string | null;
   play: () => void;
   pause: () => void;
   restart: () => void;
@@ -143,6 +149,8 @@ export function useRouteReplay(date?: string): UseRouteReplayResult {
   const visibleCoords = allCoords.slice(0, currentIndex);
   const progress = totalRef.current > 0 ? currentIndex / totalRef.current : 0;
 
+  const currentPoint = allPoints[currentIndex > 0 ? currentIndex - 1 : 0] ?? null;
+
   return {
     allCoords,
     visibleCoords,
@@ -153,6 +161,9 @@ export function useRouteReplay(date?: string): UseRouteReplayResult {
     currentIndex,
     totalPoints: allPoints.length,
     speed,
+    currentTime: currentPoint?.recordedAt ?? null,
+    startTime: allPoints[0]?.recordedAt ?? null,
+    endTime: allPoints[allPoints.length - 1]?.recordedAt ?? null,
     play,
     pause,
     restart,

@@ -9,7 +9,6 @@
  *   4. When the device moves outside the cluster radius → close the session.
  *   5. Reverse-geocode the cluster centroid to get a place name.
  */
-import * as Location from 'expo-location';
 import 'react-native-get-random-values';
 import { TRACKING } from '@constants/config';
 import { haversineDistance, centroid } from '@utils/geo';
@@ -163,69 +162,83 @@ function isOutsideCluster(point: LocationPoint): boolean {
 
 // ─── Reverse Geocoding ────────────────────────────────────────────────────────
 
-const GEOCODE_CATEGORY_MAP: Record<string, PlaceCategory> = {
-  // Apple / Google types → our categories
-  cafe:         'food',
-  restaurant:   'food',
-  bakery:       'food',
-  bar:          'food',
-  food:         'food',
-  gym:          'fitness',
-  fitness:      'fitness',
-  park:         'nature',
-  transit:      'transit',
-  train:        'transit',
-  subway:       'transit',
-  bus:          'transit',
-  airport:      'transit',
-  store:        'shopping',
-  shopping:     'shopping',
-  mall:         'shopping',
-  supermarket:  'shopping',
-};
+const MAPTILER_KEY = process.env.EXPO_PUBLIC_MAPTILER_KEY ?? '';
+
+// MapTiler / OSM category strings → our PlaceCategory
+const CATEGORY_KEYWORDS: Array<[string, PlaceCategory]> = [
+  ['restaurant', 'food'],
+  ['cafe',       'food'],
+  ['fast_food',  'food'],
+  ['bakery',     'food'],
+  ['bar',        'food'],
+  ['food',       'food'],
+  ['gym',        'fitness'],
+  ['fitness',    'fitness'],
+  ['sports',     'fitness'],
+  ['park',       'nature'],
+  ['garden',     'nature'],
+  ['nature',     'nature'],
+  ['train',      'transit'],
+  ['subway',     'transit'],
+  ['bus',        'transit'],
+  ['airport',    'transit'],
+  ['transit',    'transit'],
+  ['transport',  'transit'],
+  ['supermarket','shopping'],
+  ['mall',       'shopping'],
+  ['shop',       'shopping'],
+  ['store',      'shopping'],
+  ['market',     'shopping'],
+];
+
+function classifyCategory(raw: string): PlaceCategory {
+  const lower = raw.toLowerCase();
+  for (const [keyword, cat] of CATEGORY_KEYWORDS) {
+    if (lower.includes(keyword)) return cat;
+  }
+  return 'other';
+}
 
 async function reverseGeocode(
   lat: number,
-  lng: number
+  lng: number,
 ): Promise<{ placeName: string; address: string; category: PlaceCategory }> {
+  const fallback = {
+    placeName: 'Unknown Place',
+    address: `${lat.toFixed(4)}, ${lng.toFixed(4)}`,
+    category: 'other' as PlaceCategory,
+  };
+
+  if (!MAPTILER_KEY) return fallback;
+
   try {
-    const results = await Location.reverseGeocodeAsync({ latitude: lat, longitude: lng });
+    const ctrl = new AbortController();
+    const tid = setTimeout(() => ctrl.abort(), 6000);
 
-    if (results.length === 0) throw new Error('no results');
+    const res = await fetch(
+      `https://api.maptiler.com/geocoding/${lng},${lat}.json?key=${MAPTILER_KEY}&language=en`,
+      { signal: ctrl.signal },
+    ).finally(() => clearTimeout(tid));
 
-    const r = results[0];
+    if (!res.ok) return fallback;
 
-    // Build place name: prefer name, then street, then district
-    const placeName =
-      r.name ??
-      r.street ??
-      r.district ??
-      r.city ??
-      'Unknown Place';
+    const data = await res.json();
+    const features: any[] = data.features ?? [];
+    if (features.length === 0) return fallback;
 
-    // Build address string
-    const parts = [r.street, r.city, r.region].filter(Boolean);
-    const address = parts.join(', ');
+    // MapTiler returns features from most-specific (POI) to least (country).
+    // Pick the first feature that has a real text label.
+    const best = features.find(f => f.text && !f.text.match(/^\+/)) ?? features[0];
 
-    // Detect category from subregion/type hints
-    const hint = [r.name, r.subregion, r.district]
-      .join(' ')
-      .toLowerCase();
+    const placeName: string = best.text ?? fallback.placeName;
+    const address: string   = best.place_name ?? fallback.address;
 
-    let category: PlaceCategory = 'other';
-    for (const [key, cat] of Object.entries(GEOCODE_CATEGORY_MAP)) {
-      if (hint.includes(key)) {
-        category = cat;
-        break;
-      }
-    }
+    // category lives in properties.category (e.g. "restaurant", "gym", "bus_station")
+    const rawCat: string = best.properties?.category ?? best.place_type?.[0] ?? '';
+    const category = classifyCategory(rawCat);
 
     return { placeName, address, category };
   } catch {
-    return {
-      placeName: 'Unknown Place',
-      address: `${lat.toFixed(4)}, ${lng.toFixed(4)}`,
-      category: 'other',
-    };
+    return fallback;
   }
 }

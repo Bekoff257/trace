@@ -1,16 +1,20 @@
 /**
- * useRealtimeFriends — subscribes to Supabase Realtime for friends' live locations
- * and profile updates. Updates the friendsStore on every change.
+ * useRealtimeFriends — subscribes to Supabase Realtime for:
+ *   - friends' live locations
+ *   - profile changes
+ *   - incoming friend requests  (friendships INSERT where friend_id = me)
+ *   - accepted outgoing requests (friendships UPDATE where user_id  = me)
  */
 import { useEffect, useRef } from 'react';
 import type { RealtimeChannel } from '@supabase/supabase-js';
 import { supabase } from '@services/supabaseClient';
 import { useFriendsStore } from '@stores/friendsStore';
 import { speedToStatus } from '@services/friendLocationPublisher';
+import { showLocalNotification } from '@services/notificationService';
 import type { FriendLocation, FriendProfile } from '@/types/index';
 
 export function useRealtimeFriends(userId: string | undefined) {
-  const { fetchFriends, upsertLocation, upsertProfile } = useFriendsStore();
+  const { fetchFriends, fetchPendingRequests, upsertLocation, upsertProfile } = useFriendsStore();
   const channelRef = useRef<RealtimeChannel | null>(null);
 
   useEffect(() => {
@@ -18,10 +22,12 @@ export function useRealtimeFriends(userId: string | undefined) {
 
     // Initial fetch
     fetchFriends(userId);
+    fetchPendingRequests(userId);
 
-    // Subscribe to real-time changes on friend_locations and user_profiles
     const channel = supabase
       .channel(`friends:${userId}`)
+
+      // ── Live friend locations ─────────────────────────────────────────────
       .on(
         'postgres_changes',
         { event: '*', schema: 'public', table: 'friend_locations' },
@@ -43,6 +49,8 @@ export function useRealtimeFriends(userId: string | undefined) {
           upsertLocation(row.user_id, location);
         }
       )
+
+      // ── Friend profile changes ────────────────────────────────────────────
       .on(
         'postgres_changes',
         { event: '*', schema: 'public', table: 'user_profiles' },
@@ -54,10 +62,63 @@ export function useRealtimeFriends(userId: string | undefined) {
             userId: row.user_id,
             displayName: row.display_name,
             avatarUrl: row.avatar_url ?? undefined,
+            username: row.username ?? undefined,
           };
           upsertProfile(profile);
         }
       )
+
+      // ── Someone sent ME a friend request ─────────────────────────────────
+      .on(
+        'postgres_changes',
+        {
+          event: 'INSERT',
+          schema: 'public',
+          table: 'friendships',
+          filter: `friend_id=eq.${userId}`,
+        },
+        async (payload) => {
+          const senderId = (payload.new as any).user_id;
+          // Refresh pending list so it appears immediately on the Friends screen
+          fetchPendingRequests(userId);
+          // Fire a local notification with the sender's name
+          try {
+            const { data: profile } = await supabase
+              .from('user_profiles')
+              .select('display_name')
+              .eq('user_id', senderId)
+              .maybeSingle();
+            showLocalNotification(
+              'New Friend Request',
+              `${profile?.display_name ?? 'Someone'} wants to be your friend`,
+              { type: 'friend_request' },
+            );
+          } catch {}
+        }
+      )
+
+      // ── My outgoing request was accepted ─────────────────────────────────
+      .on(
+        'postgres_changes',
+        {
+          event: 'UPDATE',
+          schema: 'public',
+          table: 'friendships',
+          filter: `user_id=eq.${userId}`,
+        },
+        (payload) => {
+          if ((payload.new as any).status === 'accepted') {
+            // New friend appears on the map and Friends list immediately
+            fetchFriends(userId);
+            showLocalNotification(
+              'Friend Request Accepted!',
+              'You have a new friend — check the Friends screen',
+              { type: 'friend_accepted' },
+            );
+          }
+        }
+      )
+
       .subscribe();
 
     channelRef.current = channel;

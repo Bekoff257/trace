@@ -10,7 +10,7 @@ import {
   Modal,
 } from 'react-native';
 import { useAlert } from '@components/ui/CustomAlert';
-import { Map as MapView, Camera, UserLocation, type CameraRef } from '@maplibre/maplibre-react-native';
+import { Map as MapView, Camera, UserLocation, Layer, type CameraRef } from '@maplibre/maplibre-react-native';
 import { MAP_STYLE } from '@constants/mapStyle';
 import { router } from 'expo-router';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -67,13 +67,16 @@ export default function HomeScreen() {
   // Start/stop friend location publisher with tracking
   useEffect(() => {
     if (isTracking && user?.id) {
-      initPublisher(user.id);
+      initPublisher(user.id, user.username ?? undefined);
     } else {
       stopPublisher();
     }
-  }, [isTracking, user?.id]);
+  }, [isTracking, user?.id, user?.username]);
   const [mapFullscreen, setMapFullscreen] = useState(false);
-  const [fullscreenInitCenter, setFullscreenInitCenter] = useState<[number, number]>(centerCoord);
+  const [fullscreenInitCenter, setFullscreenInitCenter] = useState<[number, number]>(() =>
+    lastPoint ? [lastPoint.lng, lastPoint.lat] : [-122.4194, 37.7749]
+  );
+  const [is3D, setIs3D] = useState(false);
   const cameraRef = useRef<CameraRef>(null);
   const fullscreenCameraRef = useRef<CameraRef>(null);
 
@@ -106,23 +109,26 @@ export default function HomeScreen() {
 
   // Road-snapped version of the route (updated 3 s after the last new GPS point)
   const [snappedCoords, setSnappedCoords] = useState<LatLng[]>([]);
+  const [snapSucceeded, setSnapSucceeded] = useState(false);
   const routeCoordsRef = useRef(routeCoords);
   routeCoordsRef.current = routeCoords;
   const snapTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
     if (snapTimerRef.current) clearTimeout(snapTimerRef.current);
-    if (routeCoords.length < 2) { setSnappedCoords([]); return; }
+    if (routeCoords.length < 2) { setSnappedCoords([]); setSnapSucceeded(false); return; }
     snapTimerRef.current = setTimeout(() => {
-      snapToRoads(routeCoordsRef.current)
-        .then(setSnappedCoords)
-        .catch(() => {});
+      snapToRoads(routeCoordsRef.current).then(({ coords, snapped }) => {
+        setSnappedCoords(coords);
+        setSnapSucceeded(snapped);
+      });
     }, 3000);
     return () => { if (snapTimerRef.current) clearTimeout(snapTimerRef.current); };
-  }, [recentPoints.length]); // re-snap 3 s after each new GPS point arrives
+  }, [recentPoints.length]);
 
-  // Use road-snapped path for display; fall back to raw GPS while snapping is pending
-  const displayCoords = snappedCoords.length >= 2 ? snappedCoords : routeCoords;
+  // When offline/snapping failed: always show live raw GPS (no stale freeze)
+  // When snapping succeeded: show road-snapped path
+  const displayCoords = snapSucceeded && snappedCoords.length >= 2 ? snappedCoords : routeCoords;
 
   const fadeAnim = useRef(new Animated.Value(0)).current;
   const slideAnim = useRef(new Animated.Value(24)).current;
@@ -219,12 +225,28 @@ export default function HomeScreen() {
                   ref={cameraRef}
                   center={centerCoord}
                   zoom={13}
+                  pitch={is3D ? 45 : 0}
                 />
                 {isTracking && <UserLocation />}
                 {trailStyle === 'lines'
   ? <RouteLayer allCoords={displayCoords} visibleCoords={displayCoords} />
-  : <FootstepsLayer coords={displayCoords} />
+  : <FootstepsLayer coords={routeCoords} />
 }
+                {is3D && (
+                  <Layer
+                    id="3d-buildings"
+                    type="fill-extrusion"
+                    source="openmaptiles"
+                    {...{ 'source-layer': 'building' }}
+                    filter={['has', 'render_height']}
+                    paint={{
+                      'fill-extrusion-color': '#1a1a2e',
+                      'fill-extrusion-height': ['get', 'render_height'],
+                      'fill-extrusion-base': ['get', 'render_min_height'],
+                      'fill-extrusion-opacity': 0.82,
+                    }}
+                  />
+                )}
                 {sessions.slice(0, 5).map((s) => (
                   <VisitMarker
                     key={s.id}
@@ -274,6 +296,17 @@ export default function HomeScreen() {
                 <Text style={styles.trailToggleLabel}>
                   {trailStyle === 'lines' ? 'Footsteps' : 'Lines'}
                 </Text>
+              </TouchableOpacity>
+
+              {/* 3D toggle (mini map) */}
+              <TouchableOpacity
+                style={[styles.mapIconBtn, styles.threeDBtn]}
+                onPress={() => setIs3D(v => !v)}
+                activeOpacity={0.8}
+              >
+                <BlurView intensity={60} tint="dark" style={StyleSheet.absoluteFill} />
+                <View style={[styles.mapIconBtnBorder, is3D && styles.mapIconBtnBorderActive]} />
+                <Text style={[styles.threeDLabel, is3D && styles.threeDLabelActive]}>3D</Text>
               </TouchableOpacity>
 
               {/* Expand button */}
@@ -385,17 +418,35 @@ export default function HomeScreen() {
             mapStyle={MAP_STYLE}
             attribution={false}
             logo={false}
+            touchPitch={is3D}
+            touchRotate={is3D}
           >
             <Camera
               ref={fullscreenCameraRef}
               center={fullscreenInitCenter}
               zoom={14}
+              pitch={is3D ? 45 : 0}
             />
             {isTracking && <UserLocation />}
             {trailStyle === 'lines'
   ? <RouteLayer allCoords={displayCoords} visibleCoords={displayCoords} />
-  : <FootstepsLayer coords={displayCoords} />
+  : <FootstepsLayer coords={routeCoords} />
 }
+            {is3D && (
+              <Layer
+                id="fs-3d-buildings"
+                type="fill-extrusion"
+                source="openmaptiles"
+                {...{ 'source-layer': 'building' }}
+                filter={['has', 'render_height']}
+                paint={{
+                  'fill-extrusion-color': '#1a1a2e',
+                  'fill-extrusion-height': ['get', 'render_height'],
+                  'fill-extrusion-base': ['get', 'render_min_height'],
+                  'fill-extrusion-opacity': 0.82,
+                }}
+              />
+            )}
             {sessions.slice(0, 5).map((s) => (
               <VisitMarker
                 key={s.id}
@@ -434,6 +485,17 @@ export default function HomeScreen() {
               <Ionicons name="locate" size={20} color={COLORS.accent} />
             </TouchableOpacity>
           )}
+
+          {/* 3D toggle (fullscreen) */}
+          <TouchableOpacity
+            style={[styles.mapIconBtn, styles.fsThreeDBtn]}
+            onPress={() => setIs3D(v => !v)}
+            activeOpacity={0.8}
+          >
+            <BlurView intensity={60} tint="dark" style={StyleSheet.absoluteFill} />
+            <View style={[styles.mapIconBtnBorder, is3D && styles.mapIconBtnBorderActive]} />
+            <Text style={[styles.threeDLabel, is3D && styles.threeDLabelActive]}>3D</Text>
+          </TouchableOpacity>
         </View>
       </Modal>
 
@@ -608,5 +670,37 @@ const styles = StyleSheet.create({
     borderRadius: RADIUS.full,
     borderWidth: 1,
     borderColor: 'rgba(255,255,255,0.2)',
+  },
+
+  // ── 3D toggle shared ──
+  mapIconBtn: {
+    width: 34, height: 34, borderRadius: RADIUS.md, overflow: 'hidden',
+    backgroundColor: COLORS.glass, alignItems: 'center', justifyContent: 'center',
+  },
+  mapIconBtnBorder: {
+    ...StyleSheet.absoluteFillObject,
+    borderRadius: RADIUS.md,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+  },
+  mapIconBtnBorderActive: {
+    borderColor: COLORS.accent,
+  },
+  threeDBtn: {
+    position: 'absolute', top: SPACING.sm, right: SPACING.sm + 34 + SPACING.xs,
+  },
+  fsThreeDBtn: {
+    position: 'absolute', bottom: 160, right: SPACING.md,
+    width: 44, height: 44, borderRadius: RADIUS.full,
+    backgroundColor: 'rgba(0,0,0,0.5)',
+  },
+  threeDLabel: {
+    color: COLORS.textSecondary,
+    fontSize: 11,
+    fontWeight: FONT.weights.bold,
+    letterSpacing: 0.5,
+  },
+  threeDLabelActive: {
+    color: COLORS.accent,
   },
 });

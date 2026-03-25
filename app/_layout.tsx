@@ -146,6 +146,7 @@ export default function RootLayout() {
             <Stack.Screen name="friends" options={{ presentation: 'card', animation: 'slide_from_right' }} />
             <Stack.Screen name="insights" options={{ presentation: 'card', animation: 'slide_from_right' }} />
             <Stack.Screen name="privacy" options={{ presentation: 'card', animation: 'slide_from_right' }} />
+            <Stack.Screen name="replay" options={{ presentation: 'fullScreenModal', animation: 'slide_from_bottom' }} />
           </Stack>
           <AuthGate />
           <LocationManager />

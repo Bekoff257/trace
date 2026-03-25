@@ -16,7 +16,6 @@ import { BlurView } from 'expo-blur';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
 import { Image } from 'expo-image';
-import { supabase } from '@services/supabaseClient';
 import { useFriendsStore } from '@stores/friendsStore';
 import { useAuthStore } from '@stores/authStore';
 import { useAlert } from '@components/ui/CustomAlert';
@@ -144,50 +143,22 @@ function PendingRow({
 export default function FriendsScreen() {
   const { t } = useTranslation();
   const { user } = useAuthStore();
-  const { friends, fetchFriends, removeFriend, acceptFriendRequest, sendFriendRequest } = useFriendsStore();
+  const {
+    friends, pendingRequests,
+    fetchFriends, fetchPendingRequests, removePendingRequest,
+    removeFriend, acceptFriendRequest, sendFriendRequest,
+  } = useFriendsStore();
   const { show: showAlert, element: alertElement } = useAlert();
 
   const [addUsername, setAddUsername] = useState('');
   const [addLoading, setAddLoading] = useState(false);
-  const [pendingRequests, setPendingRequests] = useState<
-    { id: string; userId: string; displayName: string }[]
-  >([]);
-  const [loadingPending, setLoadingPending] = useState(true);
 
   useEffect(() => {
     if (user?.id) {
       fetchFriends(user.id);
-      fetchPending(user.id);
+      fetchPendingRequests(user.id);
     }
   }, [user?.id]);
-
-  const fetchPending = async (userId: string) => {
-    setLoadingPending(true);
-    try {
-      const { data } = await supabase
-        .from('friendships')
-        .select('id, user_id')
-        .eq('friend_id', userId)
-        .eq('status', 'pending');
-
-      if (!data?.length) { setPendingRequests([]); return; }
-
-      const senderIds = data.map((r) => r.user_id);
-      const { data: profiles } = await supabase
-        .from('user_profiles')
-        .select('user_id, display_name')
-        .in('user_id', senderIds);
-
-      const rows = data.map((r) => ({
-        id: r.id,
-        userId: r.user_id,
-        displayName: profiles?.find((p) => p.user_id === r.user_id)?.display_name ?? 'Unknown',
-      }));
-      setPendingRequests(rows);
-    } finally {
-      setLoadingPending(false);
-    }
-  };
 
   const handleSendRequest = async () => {
     if (!user?.id || !addUsername.trim()) return;
@@ -203,9 +174,8 @@ export default function FriendsScreen() {
   };
 
   const handleAccept = async (req: { id: string; userId: string; displayName: string }) => {
-    await acceptFriendRequest(req.id);
-    setPendingRequests((prev) => prev.filter((r) => r.id !== req.id));
-    if (user?.id) fetchFriends(user.id);
+    removePendingRequest(req.id);
+    await acceptFriendRequest(req.id, user?.id);
   };
 
   const handleRemove = async (friendId: string, name: string) => {
@@ -305,7 +275,7 @@ export default function FriendsScreen() {
           </View>
 
           {/* Pending Requests */}
-          {!loadingPending && pendingRequests.length > 0 && (
+          {pendingRequests.length > 0 && (
             <View style={styles.section}>
               <Text style={styles.sectionLabel}>{t('friends.pendingRequests')} ({pendingRequests.length})</Text>
               {pendingRequests.map((req) => (

@@ -1,14 +1,15 @@
 /**
  * FootstepsLayer — renders the GPS route as alternating left/right footprint
- * shapes using pure MapLibre circles (no emoji, no images).
+ * marks using short angled LINE segments — pure MapLibre geometry, no emoji.
  *
- * Each "foot" is two overlapping circles (toe + heel) that together form
- * a foot silhouette, offset perpendicular to the direction of travel.
+ * Each "step" is a short diagonal stroke offset to the left or right of the
+ * travel direction, angled inward slightly like a real footprint:
  *
- *   path direction →
- *   ○ ○        ← right foot (toe + heel circles, offset right)
- *       ○ ○    ← left foot  (toe + heel circles, offset left)
- *           ○ ○← right foot …
+ *   travel →
+ *      \        ← right foot stroke (offset right, angled inward)
+ *          \
+ *    /          ← left foot stroke  (offset left,  angled inward)
+ *        /
  */
 import { GeoJSONSource, Layer } from '@maplibre/maplibre-react-native';
 import { useMemo } from 'react';
@@ -17,9 +18,10 @@ import { COLORS } from '@constants/theme';
 interface Coord { latitude: number; longitude: number; }
 
 // ─── Tuning ───────────────────────────────────────────────────────────────────
-const STEP_M       = 18;   // distance between consecutive footsteps
-const SIDE_M       = 3.2;  // perpendicular offset from path centre (left/right)
-const HALF_FOOT_M  = 1.6;  // toe/heel are this far ahead/behind the step centre
+const STEP_M      = 20;   // distance between consecutive footsteps
+const SIDE_M      = 4.5;  // perpendicular offset from path centre
+const STROKE_M    = 5.0;  // length of each footstep stroke
+const TOE_ANGLE   = 20;   // degrees the toe angles inward toward path centre
 
 // ─── Geo helpers ──────────────────────────────────────────────────────────────
 
@@ -35,7 +37,6 @@ function haversineM(a: Coord, b: Coord): number {
   return 6371000 * 2 * Math.atan2(Math.sqrt(x), Math.sqrt(1 - x));
 }
 
-/** Compass bearing (0–360°) from a → b. */
 function bearingDeg(a: Coord, b: Coord): number {
   const dLng = toRad(b.longitude - a.longitude);
   const lat1 = toRad(a.latitude);
@@ -46,7 +47,6 @@ function bearingDeg(a: Coord, b: Coord): number {
   )) + 360) % 360;
 }
 
-/** Move a point distM metres in bearingDeg direction. */
 function offsetPoint(c: Coord, brg: number, distM: number): Coord {
   const R = 6371000;
   const d = distM / R;
@@ -63,68 +63,64 @@ function offsetPoint(c: Coord, brg: number, distM: number): Coord {
   return { latitude: toDeg(lat2), longitude: toDeg(lng2) };
 }
 
-// ─── Footprint generator ──────────────────────────────────────────────────────
+// ─── Footstep stroke generator ────────────────────────────────────────────────
 
-interface FootFeature {
-  lng: number;
-  lat: number;
-  isToe: boolean; // toe = slightly larger radius
-}
+function generateStrokes(coords: Coord[]): GeoJSON.FeatureCollection {
+  if (coords.length < 2) return { type: 'FeatureCollection', features: [] };
 
-function generateFootprints(coords: Coord[]): FootFeature[] {
-  if (coords.length < 2) return [];
-  const features: FootFeature[] = [];
+  const features: GeoJSON.Feature[] = [];
   let accumulated = 0;
   let stepIndex = 0;
 
   for (let i = 1; i < coords.length; i++) {
     const segLen = haversineM(coords[i - 1], coords[i]);
     const brg = bearingDeg(coords[i - 1], coords[i]);
-    const perpBrg = (brg + (stepIndex % 2 === 0 ? 90 : -90)) % 360;
 
     let walked = accumulated;
     while (walked + STEP_M <= segLen) {
-      const t = (walked + STEP_M - accumulated) / segLen; // 0-1 along segment
-      // Interpolate position along segment
+      const t = (walked + STEP_M - accumulated) / segLen;
       const stepPt: Coord = {
         latitude:  coords[i - 1].latitude  + t * (coords[i].latitude  - coords[i - 1].latitude),
         longitude: coords[i - 1].longitude + t * (coords[i].longitude - coords[i - 1].longitude),
       };
 
-      const side = stepIndex % 2 === 0 ? 90 : -90;
-      const sidePt = offsetPoint(stepPt, (brg + side + 360) % 360, SIDE_M);
+      const isLeft = stepIndex % 2 === 0;
+      // Side bearing: 90° left or right of travel direction
+      const sideBrg = (brg + (isLeft ? -90 : 90) + 360) % 360;
+      // Centre of this footstep, offset sideways from path
+      const centre = offsetPoint(stepPt, sideBrg, SIDE_M);
 
-      // Toe circle — slightly ahead in travel direction
-      const toePt = offsetPoint(sidePt, brg, HALF_FOOT_M);
-      features.push({ lng: toePt.longitude, lat: toePt.latitude, isToe: true });
+      // Stroke runs diagonally: heel is slightly behind & outward, toe is ahead & inward
+      // Left foot: heel toward back-left, toe toward front-right (angles inward)
+      // Right foot: heel toward back-right, toe toward front-left
+      const inward = isLeft ? 90 : -90;
+      const heelBrg = (brg + 180 + (isLeft ? -TOE_ANGLE : TOE_ANGLE) + 360) % 360;
+      const toeBrg  = (brg       + (isLeft ?  TOE_ANGLE : -TOE_ANGLE) + 360) % 360;
 
-      // Heel circle — slightly behind
-      const heelPt = offsetPoint(sidePt, (brg + 180) % 360, HALF_FOOT_M);
-      features.push({ lng: heelPt.longitude, lat: heelPt.latitude, isToe: false });
+      const heel = offsetPoint(centre, heelBrg, STROKE_M / 2);
+      const toe  = offsetPoint(centre, toeBrg,  STROKE_M / 2);
+
+      features.push({
+        type: 'Feature',
+        properties: {},
+        geometry: {
+          type: 'LineString',
+          coordinates: [
+            [heel.longitude, heel.latitude],
+            [toe.longitude,  toe.latitude],
+          ],
+        },
+      });
 
       walked += STEP_M;
       stepIndex++;
     }
 
     accumulated = segLen - (walked - accumulated);
-    // carry the remainder into the next segment
     if (accumulated < 0) accumulated = 0;
   }
 
-  return features;
-}
-
-// ─── GeoJSON builders ─────────────────────────────────────────────────────────
-
-function toFeatureCollection(feats: FootFeature[]): GeoJSON.FeatureCollection {
-  return {
-    type: 'FeatureCollection',
-    features: feats.map(f => ({
-      type: 'Feature',
-      properties: { isToe: f.isToe },
-      geometry: { type: 'Point', coordinates: [f.lng, f.lat] },
-    })),
-  };
+  return { type: 'FeatureCollection', features };
 }
 
 function toPoint(c: Coord): GeoJSON.Feature<GeoJSON.Point> {
@@ -137,43 +133,43 @@ function toPoint(c: Coord): GeoJSON.Feature<GeoJSON.Point> {
 
 // ─── Component ────────────────────────────────────────────────────────────────
 
-interface FootstepsLayerProps {
-  coords: Coord[];
-}
+interface FootstepsLayerProps { coords: Coord[]; }
 
 export default function FootstepsLayer({ coords }: FootstepsLayerProps) {
-  const geojson = useMemo(() => toFeatureCollection(generateFootprints(coords)), [coords]);
+  const strokes = useMemo(() => generateStrokes(coords), [coords]);
   const head = coords.length > 0 ? coords[coords.length - 1] : null;
 
   return (
     <>
       {coords.length > 1 && (
-        <GeoJSONSource id="footsteps-src" data={geojson}>
-          {/* Soft glow halo behind each circle */}
+        <GeoJSONSource id="footsteps-src" data={strokes}>
+          {/* Soft glow halo */}
           <Layer
             id="footsteps-glow"
-            type="circle"
+            type="line"
             paint={{
-              'circle-radius': ['case', ['get', 'isToe'], 7, 5.5],
-              'circle-color': COLORS.accent,
-              'circle-opacity': 0.18,
-              'circle-blur': 0.6,
+              'line-color': COLORS.accent,
+              'line-width': 8,
+              'line-opacity': 0.15,
+              'line-blur': 4,
             }}
+            layout={{ 'line-cap': 'round', 'line-join': 'round' }}
           />
-          {/* Solid footprint circle */}
+          {/* Solid stroke */}
           <Layer
-            id="footsteps-dot"
-            type="circle"
+            id="footsteps-stroke"
+            type="line"
             paint={{
-              'circle-radius': ['case', ['get', 'isToe'], 4, 3],
-              'circle-color': COLORS.accent,
-              'circle-opacity': 0.85,
+              'line-color': COLORS.accent,
+              'line-width': 3,
+              'line-opacity': 0.9,
             }}
+            layout={{ 'line-cap': 'round', 'line-join': 'round' }}
           />
         </GeoJSONSource>
       )}
 
-      {/* Head dot — same as RouteLayer */}
+      {/* Head dot — matches RouteLayer */}
       {head && (
         <GeoJSONSource id="fs-head-dot" data={toPoint(head)}>
           <Layer
