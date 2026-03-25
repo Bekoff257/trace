@@ -130,6 +130,10 @@ export default function HomeScreen() {
   // When snapping succeeded: show road-snapped path
   const displayCoords = snapSucceeded && snappedCoords.length >= 2 ? snappedCoords : routeCoords;
 
+  // Auto-fall back to line mode when driving (> 10 km/h = 2.78 m/s).
+  // Preserves the user's saved trailStyle preference for when they slow down.
+  const effectiveTrailStyle = (lastPoint?.speed ?? 0) > 2.78 ? 'lines' : trailStyle;
+
   const fadeAnim = useRef(new Animated.Value(0)).current;
   const slideAnim = useRef(new Animated.Value(24)).current;
 
@@ -228,7 +232,7 @@ export default function HomeScreen() {
                   pitch={is3D ? 45 : 0}
                 />
                 {isTracking && <UserLocation />}
-                {trailStyle === 'lines'
+                {effectiveTrailStyle === 'lines'
   ? <RouteLayer allCoords={displayCoords} visibleCoords={displayCoords} />
   : <FootstepsLayer coords={routeCoords} />
 }
@@ -428,7 +432,7 @@ export default function HomeScreen() {
               pitch={is3D ? 45 : 0}
             />
             {isTracking && <UserLocation />}
-            {trailStyle === 'lines'
+            {effectiveTrailStyle === 'lines'
   ? <RouteLayer allCoords={displayCoords} visibleCoords={displayCoords} />
   : <FootstepsLayer coords={routeCoords} />
 }
@@ -488,12 +492,11 @@ export default function HomeScreen() {
 
           {/* 3D toggle (fullscreen) */}
           <TouchableOpacity
-            style={[styles.mapIconBtn, styles.fsThreeDBtn]}
+            style={[styles.fsThreeDBtn, is3D && styles.fsThreeDBtnActive]}
             onPress={() => setIs3D(v => !v)}
             activeOpacity={0.8}
           >
             <BlurView intensity={60} tint="dark" style={StyleSheet.absoluteFill} />
-            <View style={[styles.mapIconBtnBorder, styles.fsThreeDBtnBorder, is3D && styles.mapIconBtnBorderActive]} />
             <Text style={[styles.threeDLabel, is3D && styles.threeDLabelActive]}>3D</Text>
           </TouchableOpacity>
         </View>
@@ -692,10 +695,14 @@ const styles = StyleSheet.create({
   fsThreeDBtn: {
     position: 'absolute', bottom: 160, right: SPACING.md,
     width: 44, height: 44, borderRadius: RADIUS.full,
+    overflow: 'hidden',
     backgroundColor: 'rgba(0,0,0,0.5)',
+    alignItems: 'center', justifyContent: 'center',
+    borderWidth: 1.5,
+    borderColor: 'rgba(255,255,255,0.2)',
   },
-  fsThreeDBtnBorder: {
-    borderRadius: RADIUS.full,
+  fsThreeDBtnActive: {
+    borderColor: COLORS.accent,
   },
   threeDLabel: {
     color: COLORS.textSecondary,

@@ -1,27 +1,21 @@
 /**
- * FootstepsLayer — renders the GPS route as alternating left/right footprint
- * marks using short angled LINE segments — pure MapLibre geometry, no emoji.
+ * FootstepsLayer — renders the GPS route as footprint icons spaced every
+ * STEP_M metres, each rotated to face the direction of travel.
  *
- * Each "step" is a short diagonal stroke offset to the left or right of the
- * travel direction, angled inward slightly like a real footprint:
- *
- *   travel →
- *      \        ← right foot stroke (offset right, angled inward)
- *          \
- *    /          ← left foot stroke  (offset left,  angled inward)
- *        /
+ * Each icon fades + scales in on mount (spring, native driver).
+ * Capped at MAX_VISIBLE most-recent footprints for performance.
  */
-import { GeoJSONSource, Layer } from '@maplibre/maplibre-react-native';
-import { useMemo } from 'react';
+import React, { useRef, useEffect, useMemo } from 'react';
+import { View, Animated } from 'react-native';
+import { Marker } from '@maplibre/maplibre-react-native';
+import { Ionicons } from '@expo/vector-icons';
 import { COLORS } from '@constants/theme';
 
 interface Coord { latitude: number; longitude: number; }
 
 // ─── Tuning ───────────────────────────────────────────────────────────────────
-const STEP_M      = 20;   // distance between consecutive footsteps
-const SIDE_M      = 4.5;  // perpendicular offset from path centre
-const STROKE_M    = 5.0;  // length of each footstep stroke
-const TOE_ANGLE   = 20;   // degrees the toe angles inward toward path centre
+const STEP_M      = 25;   // metres between footprint icons
+const MAX_VISIBLE = 60;   // cap to keep native view count bounded
 
 // ─── Geo helpers ──────────────────────────────────────────────────────────────
 
@@ -47,88 +41,65 @@ function bearingDeg(a: Coord, b: Coord): number {
   )) + 360) % 360;
 }
 
-function offsetPoint(c: Coord, brg: number, distM: number): Coord {
-  const R = 6371000;
-  const d = distM / R;
-  const b = toRad(brg);
-  const lat1 = toRad(c.latitude);
-  const lng1 = toRad(c.longitude);
-  const lat2 = Math.asin(
-    Math.sin(lat1) * Math.cos(d) + Math.cos(lat1) * Math.sin(d) * Math.cos(b),
-  );
-  const lng2 = lng1 + Math.atan2(
-    Math.sin(b) * Math.sin(d) * Math.cos(lat1),
-    Math.cos(d) - Math.sin(lat1) * Math.sin(lat2),
-  );
-  return { latitude: toDeg(lat2), longitude: toDeg(lng2) };
-}
+// ─── Step point generator ─────────────────────────────────────────────────────
 
-// ─── Footstep stroke generator ────────────────────────────────────────────────
+interface StepPoint { lat: number; lng: number; rotation: number; }
 
-function generateStrokes(coords: Coord[]): GeoJSON.FeatureCollection {
-  if (coords.length < 2) return { type: 'FeatureCollection', features: [] };
+function generateStepPoints(coords: Coord[]): StepPoint[] {
+  if (coords.length < 2) return [];
 
-  const features: GeoJSON.Feature[] = [];
+  const points: StepPoint[] = [];
   let accumulated = 0;
-  let stepIndex = 0;
 
   for (let i = 1; i < coords.length; i++) {
     const segLen = haversineM(coords[i - 1], coords[i]);
-    const brg = bearingDeg(coords[i - 1], coords[i]);
+    const brg    = bearingDeg(coords[i - 1], coords[i]);
 
     let walked = accumulated;
     while (walked + STEP_M <= segLen) {
       const t = (walked + STEP_M - accumulated) / segLen;
-      const stepPt: Coord = {
-        latitude:  coords[i - 1].latitude  + t * (coords[i].latitude  - coords[i - 1].latitude),
-        longitude: coords[i - 1].longitude + t * (coords[i].longitude - coords[i - 1].longitude),
-      };
-
-      const isLeft = stepIndex % 2 === 0;
-      // Side bearing: 90° left or right of travel direction
-      const sideBrg = (brg + (isLeft ? -90 : 90) + 360) % 360;
-      // Centre of this footstep, offset sideways from path
-      const centre = offsetPoint(stepPt, sideBrg, SIDE_M);
-
-      // Stroke runs diagonally: heel is slightly behind & outward, toe is ahead & inward
-      // Left foot: heel toward back-left, toe toward front-right (angles inward)
-      // Right foot: heel toward back-right, toe toward front-left
-      const inward = isLeft ? 90 : -90;
-      const heelBrg = (brg + 180 + (isLeft ? -TOE_ANGLE : TOE_ANGLE) + 360) % 360;
-      const toeBrg  = (brg       + (isLeft ?  TOE_ANGLE : -TOE_ANGLE) + 360) % 360;
-
-      const heel = offsetPoint(centre, heelBrg, STROKE_M / 2);
-      const toe  = offsetPoint(centre, toeBrg,  STROKE_M / 2);
-
-      features.push({
-        type: 'Feature',
-        properties: {},
-        geometry: {
-          type: 'LineString',
-          coordinates: [
-            [heel.longitude, heel.latitude],
-            [toe.longitude,  toe.latitude],
-          ],
-        },
+      points.push({
+        lat:      coords[i - 1].latitude  + t * (coords[i].latitude  - coords[i - 1].latitude),
+        lng:      coords[i - 1].longitude + t * (coords[i].longitude - coords[i - 1].longitude),
+        rotation: brg,
       });
-
       walked += STEP_M;
-      stepIndex++;
     }
 
     accumulated = segLen - (walked - accumulated);
     if (accumulated < 0) accumulated = 0;
   }
 
-  return { type: 'FeatureCollection', features };
+  return points;
 }
 
-function toPoint(c: Coord): GeoJSON.Feature<GeoJSON.Point> {
-  return {
-    type: 'Feature',
-    properties: {},
-    geometry: { type: 'Point', coordinates: [c.longitude, c.latitude] },
-  };
+// ─── Animated footstep icon ───────────────────────────────────────────────────
+
+function FootstepIcon({ rotation }: { rotation: number }) {
+  const anim = useRef(new Animated.Value(0)).current;
+
+  useEffect(() => {
+    Animated.spring(anim, {
+      toValue: 1,
+      useNativeDriver: true,
+      tension: 160,
+      friction: 10,
+    }).start();
+  }, []);
+
+  return (
+    <Animated.View
+      style={{
+        opacity: anim,
+        transform: [
+          { rotate: `${rotation}deg` },
+          { scale: anim },
+        ],
+      }}
+    >
+      <Ionicons name="footsteps" size={16} color={COLORS.accent} />
+    </Animated.View>
+  );
 }
 
 // ─── Component ────────────────────────────────────────────────────────────────
@@ -136,64 +107,20 @@ function toPoint(c: Coord): GeoJSON.Feature<GeoJSON.Point> {
 interface FootstepsLayerProps { coords: Coord[]; }
 
 export default function FootstepsLayer({ coords }: FootstepsLayerProps) {
-  const strokes = useMemo(() => generateStrokes(coords), [coords]);
-  const head = coords.length > 0 ? coords[coords.length - 1] : null;
+  const steps   = useMemo(() => generateStepPoints(coords), [coords]);
+  const visible = steps.slice(-MAX_VISIBLE);
 
   return (
     <>
-      {coords.length > 1 && (
-        <GeoJSONSource id="footsteps-src" data={strokes}>
-          {/* Soft glow halo */}
-          <Layer
-            id="footsteps-glow"
-            type="line"
-            paint={{
-              'line-color': COLORS.accent,
-              'line-width': 8,
-              'line-opacity': 0.15,
-              'line-blur': 4,
-            }}
-            layout={{ 'line-cap': 'round', 'line-join': 'round' }}
-          />
-          {/* Solid stroke */}
-          <Layer
-            id="footsteps-stroke"
-            type="line"
-            paint={{
-              'line-color': COLORS.accent,
-              'line-width': 3,
-              'line-opacity': 0.9,
-            }}
-            layout={{ 'line-cap': 'round', 'line-join': 'round' }}
-          />
-        </GeoJSONSource>
-      )}
-
-      {/* Head dot — matches RouteLayer */}
-      {head && (
-        <GeoJSONSource id="fs-head-dot" data={toPoint(head)}>
-          <Layer
-            id="fs-head-outer"
-            type="circle"
-            paint={{ 'circle-radius': 14, 'circle-color': COLORS.accent, 'circle-opacity': 0.2 }}
-          />
-          <Layer
-            id="fs-head-mid"
-            type="circle"
-            paint={{ 'circle-radius': 8, 'circle-color': COLORS.accent, 'circle-opacity': 0.5 }}
-          />
-          <Layer
-            id="fs-head-inner"
-            type="circle"
-            paint={{
-              'circle-radius': 5,
-              'circle-color': '#ffffff',
-              'circle-stroke-width': 2,
-              'circle-stroke-color': COLORS.accent,
-            }}
-          />
-        </GeoJSONSource>
-      )}
+      {visible.map((s) => (
+        <Marker
+          key={`${s.lat.toFixed(6)},${s.lng.toFixed(6)}`}
+          lngLat={[s.lng, s.lat]}
+          anchor="center"
+        >
+          <FootstepIcon rotation={s.rotation} />
+        </Marker>
+      ))}
     </>
   );
 }
