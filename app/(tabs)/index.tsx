@@ -21,9 +21,11 @@ import { useAuthStore } from '@stores/authStore';
 import { useTranslation } from 'react-i18next';
 import { useLocationStore } from '@stores/locationStore';
 import { useFriendsStore } from '@stores/friendsStore';
+import { usePlanStore } from '@stores/planStore';
 import { useDailySummary } from '@hooks/useDailySummary';
 import { useTimeline } from '@hooks/useTimeline';
 import { useRealtimeFriends } from '@hooks/useRealtimeFriends';
+import { usePremiumGate } from '@hooks/usePremiumGate';
 import { initPublisher, stopPublisher } from '@services/friendLocationPublisher';
 import { COLORS, FONT, SPACING, RADIUS, GRADIENTS, SHADOWS } from '@constants/theme';
 import SectionLabel from '@components/ui/SectionLabel';
@@ -56,9 +58,11 @@ export default function HomeScreen() {
   const { summary, distanceMi, progressToGoal } = useDailySummary();
   const { sessions } = useTimeline();
   const { show: showAlert, element: alertElement } = useAlert();
+  const { gate, showPaywall, paywallElement } = usePremiumGate();
+  const { userPlan } = usePlanStore();
+  const footstepsPreviewLimit = userPlan === 'free' ? 10 : undefined;
   const { t } = useTranslation();
   const { bottom: safeBottom } = useSafeAreaInsets();
-  // Custom tab bar body ≈ 65px + safe area bottom padding
   const scrollPaddingBottom = 65 + Math.max(safeBottom, 10) + 24;
 
   // Realtime friends subscription
@@ -234,7 +238,7 @@ export default function HomeScreen() {
                 {isTracking && <UserLocation />}
                 {effectiveTrailStyle === 'lines'
   ? <RouteLayer allCoords={displayCoords} visibleCoords={displayCoords} />
-  : <FootstepsLayer coords={routeCoords} />
+  : <FootstepsLayer coords={routeCoords} previewLimit={footstepsPreviewLimit} onLockPress={showPaywall} />
 }
                 {is3D && (
                   <Layer
@@ -287,7 +291,13 @@ export default function HomeScreen() {
               {/* Trail style toggle */}
               <TouchableOpacity
                 style={styles.trailToggleBtn}
-                onPress={() => setTrailStyle(trailStyle === 'lines' ? 'footsteps' : 'lines')}
+                onPress={() => {
+                  if (trailStyle === 'lines') {
+                    gate('footsteps', () => setTrailStyle('footsteps'));
+                  } else {
+                    setTrailStyle('lines');
+                  }
+                }}
                 activeOpacity={0.8}
               >
                 <BlurView intensity={60} tint="dark" style={StyleSheet.absoluteFill} />
@@ -434,7 +444,7 @@ export default function HomeScreen() {
             {isTracking && <UserLocation />}
             {effectiveTrailStyle === 'lines'
   ? <RouteLayer allCoords={displayCoords} visibleCoords={displayCoords} />
-  : <FootstepsLayer coords={routeCoords} />
+  : <FootstepsLayer coords={routeCoords} previewLimit={footstepsPreviewLimit} onLockPress={showPaywall} />
 }
             {is3D && (
               <Layer
@@ -503,6 +513,7 @@ export default function HomeScreen() {
       </Modal>
 
       {alertElement}
+      {paywallElement}
     </View>
   );
 }

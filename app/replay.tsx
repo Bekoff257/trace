@@ -10,6 +10,7 @@ import {
   TouchableOpacity,
   ActivityIndicator,
   StatusBar,
+  Animated,
 } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import {
@@ -25,6 +26,8 @@ import { router } from 'expo-router';
 import { useRouteReplay, type PlaybackSpeed } from '@hooks/useRouteReplay';
 import RouteLayer from '@components/map/RouteLayer';
 import VisitMarker from '@components/map/VisitMarker';
+import PaywallModal from '@components/ui/PaywallModal';
+import { usePlanStore } from '@stores/planStore';
 import { MAP_STYLE } from '@constants/mapStyle';
 import { COLORS, FONT, SPACING, RADIUS, SHADOWS } from '@constants/theme';
 
@@ -67,6 +70,11 @@ export default function ReplayScreen() {
   const { bottom: safeBottom } = useSafeAreaInsets();
   const [dateOffset, setDateOffset] = useState(0);
   const [is3D, setIs3D] = useState(false);
+  const { userPlan } = usePlanStore();
+  const [previewEnded, setPreviewEnded] = useState(false);
+  const [paywallVisible, setPaywallVisible] = useState(false);
+  const previewTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const overlayAnim = useRef(new Animated.Value(0)).current;
 
   // Scrubber track width measured via onLayout
   const trackWidthRef = useRef(0);
@@ -162,6 +170,61 @@ export default function ReplayScreen() {
     [sessions, currentTime],
   );
 
+  // ─── Free preview logic ────────────────────────────────────────────────────
+
+  // Reset preview when date changes; clear any pending timer
+  useEffect(() => {
+    setPreviewEnded(false);
+    overlayAnim.setValue(0);
+    if (previewTimerRef.current) {
+      clearTimeout(previewTimerRef.current);
+      previewTimerRef.current = null;
+    }
+  }, [date]);
+
+  // Clean up timer on unmount
+  useEffect(() => {
+    return () => {
+      if (previewTimerRef.current) clearTimeout(previewTimerRef.current);
+    };
+  }, []);
+
+  // Fade in the overlay when preview ends
+  useEffect(() => {
+    if (previewEnded) {
+      Animated.timing(overlayAnim, {
+        toValue: 1,
+        duration: 400,
+        useNativeDriver: true,
+      }).start();
+    }
+  }, [previewEnded]);
+
+  function handlePlayPress() {
+    if (userPlan === 'premium') {
+      isPlaying ? pause() : play();
+      return;
+    }
+    // Free user: after preview ended, every play attempt opens paywall
+    if (previewEnded) {
+      setPaywallVisible(true);
+      return;
+    }
+    if (isPlaying) {
+      pause();
+      return;
+    }
+    // Start the 3-second preview (timer fires once)
+    play();
+    if (!previewTimerRef.current) {
+      previewTimerRef.current = setTimeout(() => {
+        pause();
+        setPreviewEnded(true);
+        previewTimerRef.current = null;
+      }, 3000);
+    }
+  }
+
   // ─── Scrubber touch responder ──────────────────────────────────────────────
 
   const handleScrubberTouch = useCallback((locationX: number) => {
@@ -235,6 +298,28 @@ export default function ReplayScreen() {
         ))}
       </MapView>
 
+      {/* ── Free preview ended overlay ── */}
+      {previewEnded && userPlan === 'free' && (
+        <Animated.View style={[styles.previewOverlay, { opacity: overlayAnim }]} pointerEvents="box-none">
+          <View style={styles.previewCard}>
+            <BlurView intensity={60} tint="dark" style={StyleSheet.absoluteFill} />
+            <View style={styles.previewCardBorder} />
+            <Ionicons name="lock-closed" size={22} color="#FFD700" style={{ marginBottom: SPACING.xs }} />
+            <Text style={styles.previewTitle}>Unlock full Replay Mode 👑</Text>
+            <Text style={styles.previewSub}>Preview ended — upgrade to watch your full day</Text>
+            <TouchableOpacity
+              style={styles.previewUpgradeBtn}
+              onPress={() => setPaywallVisible(true)}
+              activeOpacity={0.85}
+            >
+              <LinearGradient colors={['#FFD700', '#FFA500']} style={styles.previewUpgradeBtnGrad}>
+                <Text style={styles.previewUpgradeBtnText}>Upgrade to Premium</Text>
+              </LinearGradient>
+            </TouchableOpacity>
+          </View>
+        </Animated.View>
+      )}
+
       {/* ── Top bar ── */}
       <SafeAreaView edges={['top']} style={styles.topSafe} pointerEvents="box-none">
         <View style={styles.topBar}>
@@ -288,6 +373,8 @@ export default function ReplayScreen() {
           </TouchableOpacity>
         </View>
       </SafeAreaView>
+
+      <PaywallModal visible={paywallVisible} onClose={() => setPaywallVisible(false)} />
 
       {/* ── Controls panel ── */}
       <View style={[styles.panel, { paddingBottom: safeBottom + SPACING.md }]}>
@@ -364,7 +451,7 @@ export default function ReplayScreen() {
                 {/* Play / Pause */}
                 <TouchableOpacity
                   style={styles.playBtn}
-                  onPress={isPlaying ? pause : play}
+                  onPress={handlePlayPress}
                   activeOpacity={0.85}
                 >
                   <LinearGradient
@@ -653,5 +740,64 @@ const styles = StyleSheet.create({
   },
   speedLabelActive: {
     color: COLORS.accent,
+  },
+
+  // ── Free preview overlay
+  previewOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: SPACING.lg,
+    // sits above map, below top bar
+    top: 80,
+    bottom: 160,
+  },
+  previewCard: {
+    width: '100%',
+    borderRadius: RADIUS.xl,
+    overflow: 'hidden',
+    backgroundColor: 'rgba(10,10,20,0.6)',
+    alignItems: 'center',
+    padding: SPACING.lg,
+    gap: SPACING.sm,
+  },
+  previewCardBorder: {
+    ...StyleSheet.absoluteFillObject,
+    borderRadius: RADIUS.xl,
+    borderWidth: 1,
+    borderColor: 'rgba(255,215,0,0.3)',
+  },
+  previewTitle: {
+    color: COLORS.textPrimary,
+    fontSize: FONT.sizes.md,
+    fontWeight: FONT.weights.black,
+    textAlign: 'center',
+  },
+  previewSub: {
+    color: COLORS.textMuted,
+    fontSize: FONT.sizes.xs,
+    textAlign: 'center',
+    lineHeight: 18,
+  },
+  previewUpgradeBtn: {
+    width: '100%',
+    borderRadius: RADIUS.lg,
+    overflow: 'hidden',
+    marginTop: SPACING.xs,
+    shadowColor: '#FFD700',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.4,
+    shadowRadius: 8,
+    elevation: 6,
+  },
+  previewUpgradeBtnGrad: {
+    paddingVertical: 13,
+    alignItems: 'center',
+  },
+  previewUpgradeBtnText: {
+    color: '#1a1a00',
+    fontSize: FONT.sizes.sm,
+    fontWeight: FONT.weights.black,
+    letterSpacing: 0.4,
   },
 });

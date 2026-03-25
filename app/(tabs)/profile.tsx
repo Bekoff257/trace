@@ -9,6 +9,8 @@ import { Ionicons } from '@expo/vector-icons';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useAuthStore } from '@stores/authStore';
 import { useLocationStore } from '@stores/locationStore';
+import { usePlanStore } from '@stores/planStore';
+import PaywallModal from '@components/ui/PaywallModal';
 import { supabase } from '@services/supabaseClient';
 import { COLORS, FONT, SPACING, RADIUS, GRADIENTS } from '@constants/theme';
 import SectionLabel from '@components/ui/SectionLabel';
@@ -59,6 +61,8 @@ export default function ProfileScreen() {
   const { t } = useTranslation();
   const { user, signOut, updateProfile } = useAuthStore();
   const { isTracking, mode, setTrackingMode, setTracking } = useLocationStore();
+  const { userPlan } = usePlanStore();
+  const [paywallVisible, setPaywallVisible] = useState(false);
   const displayName = user?.displayName ?? 'Alex';
   const email = user?.email ?? 'alex@example.com';
   const initial = displayName.charAt(0).toUpperCase();
@@ -251,6 +255,35 @@ export default function ProfileScreen() {
             </View>
           </View>
 
+          {/* Plan */}
+          <Text style={styles.groupTitle}>Plan</Text>
+          <View style={styles.menuCard}>
+            <BlurView intensity={15} tint="dark" style={StyleSheet.absoluteFill} />
+            <View style={styles.menuBorder} />
+            {userPlan === 'premium' ? (
+              <View style={styles.planRow}>
+                <View style={[styles.menuIconWrap, { backgroundColor: '#FFD70018' }]}>
+                  <Ionicons name="star" size={18} color="#FFD700" />
+                </View>
+                <Text style={styles.menuLabel}>Premium</Text>
+                <Text style={styles.planBadge}>Active</Text>
+              </View>
+            ) : (
+              <TouchableOpacity style={styles.planRow} onPress={() => setPaywallVisible(true)} activeOpacity={0.75}>
+                <View style={[styles.menuIconWrap, { backgroundColor: `${COLORS.textMuted}18` }]}>
+                  <Ionicons name="lock-closed-outline" size={18} color={COLORS.textMuted} />
+                </View>
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.menuLabel}>Free Plan</Text>
+                  <Text style={styles.planSub}>Upgrade to unlock all features</Text>
+                </View>
+                <View style={styles.upgradeChip}>
+                  <Text style={styles.upgradeChipText}>Upgrade 👑</Text>
+                </View>
+              </TouchableOpacity>
+            )}
+          </View>
+
           {/* Tracking */}
           <Text style={styles.groupTitle}>{t('profile.trackingGroup')}</Text>
           <View style={styles.menuCard}>
@@ -404,6 +437,7 @@ export default function ProfileScreen() {
           </View>
         </View>
       </Modal>
+      <PaywallModal visible={paywallVisible} onClose={() => setPaywallVisible(false)} />
     </View>
   );
 }
@@ -581,5 +615,42 @@ const styles = StyleSheet.create({
     fontWeight: FONT.weights.medium,
     marginTop: -SPACING.sm,
     marginBottom: SPACING.md,
+  },
+
+  // Plan section
+  planRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: SPACING.md,
+    gap: SPACING.sm,
+  },
+  planBadge: {
+    color: '#FFD700',
+    fontSize: FONT.sizes.xs,
+    fontWeight: FONT.weights.bold,
+    backgroundColor: '#FFD70020',
+    borderRadius: RADIUS.full,
+    paddingHorizontal: 10,
+    paddingVertical: 3,
+    borderWidth: 1,
+    borderColor: '#FFD70040',
+  },
+  planSub: {
+    color: COLORS.textMuted,
+    fontSize: FONT.sizes.xs,
+    marginTop: 2,
+  },
+  upgradeChip: {
+    backgroundColor: '#FFD70018',
+    borderRadius: RADIUS.full,
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderWidth: 1,
+    borderColor: '#FFD70040',
+  },
+  upgradeChipText: {
+    color: '#FFD700',
+    fontSize: FONT.sizes.xs,
+    fontWeight: FONT.weights.bold,
   },
 });

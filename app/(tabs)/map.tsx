@@ -10,12 +10,14 @@ import { Ionicons } from '@expo/vector-icons';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { router } from 'expo-router';
 import { useTimeline } from '@hooks/useTimeline';
+import { usePremiumGate } from '@hooks/usePremiumGate';
 import { COLORS, FONT, SPACING, RADIUS, GRADIENTS } from '@constants/theme';
 import SectionLabel from '@components/ui/SectionLabel';
 import TimelineItem from '@components/timeline/TimelineItem';
 
 export default function LiveTimelineScreen() {
   const { t, i18n } = useTranslation();
+  const { gate, paywallElement } = usePremiumGate();
   const today = new Date().toLocaleDateString(i18n.language, {
     weekday: 'long',
     month: 'long',
@@ -52,7 +54,7 @@ export default function LiveTimelineScreen() {
           <View style={styles.headerActions}>
             <TouchableOpacity
               style={styles.iconBtn}
-              onPress={() => router.push('/replay' as any)}
+              onPress={() => gate('replay', () => router.push('/replay' as any))}
               activeOpacity={0.75}
             >
               <BlurView intensity={50} tint="dark" style={StyleSheet.absoluteFill} />
@@ -109,6 +111,7 @@ export default function LiveTimelineScreen() {
 
 
       </SafeAreaView>
+      {paywallElement}
     </View>
   );
 }

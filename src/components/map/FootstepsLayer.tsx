@@ -4,12 +4,16 @@
  *
  * Each icon fades + scales in on mount (spring, native driver).
  * Capped at MAX_VISIBLE most-recent footprints for performance.
+ *
+ * When `previewLimit` is set (free users), only that many icons are shown.
+ * A lock-overlay Marker is placed at the last visible step so the user can
+ * tap to upgrade.
  */
 import React, { useRef, useEffect, useMemo } from 'react';
-import { View, Animated } from 'react-native';
+import { View, Text, Animated, StyleSheet, TouchableOpacity } from 'react-native';
 import { Marker } from '@maplibre/maplibre-react-native';
 import { Ionicons } from '@expo/vector-icons';
-import { COLORS } from '@constants/theme';
+import { COLORS, FONT, RADIUS, SPACING } from '@constants/theme';
 
 interface Coord { latitude: number; longitude: number; }
 
@@ -91,10 +95,7 @@ function FootstepIcon({ rotation }: { rotation: number }) {
     <Animated.View
       style={{
         opacity: anim,
-        transform: [
-          { rotate: `${rotation}deg` },
-          { scale: anim },
-        ],
+        transform: [{ rotate: `${rotation}deg` }, { scale: anim }],
       }}
     >
       <Ionicons name="footsteps" size={16} color={COLORS.accent} />
@@ -102,13 +103,46 @@ function FootstepIcon({ rotation }: { rotation: number }) {
   );
 }
 
+// ─── Lock overlay marker ──────────────────────────────────────────────────────
+
+function LockOverlay({ onPress }: { onPress?: () => void }) {
+  const anim = useRef(new Animated.Value(0)).current;
+
+  useEffect(() => {
+    Animated.timing(anim, {
+      toValue: 1,
+      duration: 350,
+      delay: 200,
+      useNativeDriver: true,
+    }).start();
+  }, []);
+
+  return (
+    <Animated.View style={[styles.lockWrap, { opacity: anim, transform: [{ scale: anim }] }]}>
+      <TouchableOpacity onPress={onPress} activeOpacity={0.85} style={styles.lockBtn}>
+        <Ionicons name="lock-closed" size={11} color="#FFD700" />
+        <Text style={styles.lockText}>Unlock Footsteps 👑</Text>
+      </TouchableOpacity>
+    </Animated.View>
+  );
+}
+
 // ─── Component ────────────────────────────────────────────────────────────────
 
-interface FootstepsLayerProps { coords: Coord[]; }
+interface FootstepsLayerProps {
+  coords: Coord[];
+  /** If set, only show this many footsteps then render a lock overlay. */
+  previewLimit?: number;
+  /** Called when the lock overlay is tapped. */
+  onLockPress?: () => void;
+}
 
-export default function FootstepsLayer({ coords }: FootstepsLayerProps) {
+export default function FootstepsLayer({ coords, previewLimit, onLockPress }: FootstepsLayerProps) {
   const steps   = useMemo(() => generateStepPoints(coords), [coords]);
-  const visible = steps.slice(-MAX_VISIBLE);
+  const pool    = steps.slice(-MAX_VISIBLE);
+  const visible = previewLimit != null ? pool.slice(0, previewLimit) : pool;
+  const showLock = previewLimit != null && pool.length > previewLimit;
+  const lockStep = showLock ? pool[previewLimit - 1] : null;
 
   return (
     <>
@@ -121,6 +155,40 @@ export default function FootstepsLayer({ coords }: FootstepsLayerProps) {
           <FootstepIcon rotation={s.rotation} />
         </Marker>
       ))}
+
+      {lockStep && (
+        <Marker
+          key="footstep-lock"
+          lngLat={[lockStep.lng, lockStep.lat]}
+          anchor="bottom"
+        >
+          <LockOverlay onPress={onLockPress} />
+        </Marker>
+      )}
     </>
   );
 }
+
+// ─── Styles ───────────────────────────────────────────────────────────────────
+
+const styles = StyleSheet.create({
+  lockWrap: {
+    marginBottom: 6,
+  },
+  lockBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    backgroundColor: 'rgba(12,12,24,0.92)',
+    borderRadius: RADIUS.full,
+    paddingHorizontal: SPACING.sm,
+    paddingVertical: 5,
+    borderWidth: 1,
+    borderColor: 'rgba(255,215,0,0.45)',
+  },
+  lockText: {
+    color: '#FFD700',
+    fontSize: FONT.sizes.xs,
+    fontWeight: FONT.weights.bold,
+  },
+});

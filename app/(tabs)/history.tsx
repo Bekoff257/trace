@@ -9,6 +9,8 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { COLORS, FONT, SPACING, RADIUS, GRADIENTS } from '@constants/theme';
 import SectionLabel from '@components/ui/SectionLabel';
 import { useMonthHistory } from '@hooks/useMonthHistory';
+import { usePremiumGate } from '@hooks/usePremiumGate';
+import { usePlanStore } from '@stores/planStore';
 
 // Map a distance (meters) to a dot intensity style
 function dotIntensity(distanceM: number): 'high' | 'mid' | 'low' {
@@ -20,6 +22,11 @@ function dotIntensity(distanceM: number): 'high' | 'mid' | 'low' {
 export default function HistoryScreen() {
   const { t, i18n } = useTranslation();
   const { days, isLoading, year, month, goToPrevMonth, goToNextMonth } = useMonthHistory();
+  const { showPaywall, paywallElement } = usePremiumGate();
+  const { userPlan } = usePlanStore();
+  const now = new Date();
+  const isCurrentMonth = year === now.getFullYear() && month === now.getMonth();
+  const isFreeLocked = userPlan === 'free' && !isCurrentMonth;
   // Use local date (not UTC) so "today" is always correct regardless of timezone
   function localDateString(d = new Date()) {
     return [
@@ -97,6 +104,15 @@ export default function HistoryScreen() {
               ))}
             </View>
 
+            {/* Upgrade banner — shown when free user browses a past month */}
+            {isFreeLocked && (
+              <TouchableOpacity style={styles.lockBanner} onPress={showPaywall} activeOpacity={0.85}>
+                <Ionicons name="lock-closed" size={13} color="#FFD700" />
+                <Text style={styles.lockBannerText}>Unlock full history to see your past 👑</Text>
+                <Ionicons name="chevron-forward" size={13} color="#FFD700" />
+              </TouchableOpacity>
+            )}
+
             {/* Calendar grid */}
             {isLoading ? (
               <View style={styles.calLoading}>
@@ -111,12 +127,16 @@ export default function HistoryScreen() {
                   const isSelected = day.date === selectedDate;
                   const hasData = !!day.summary && day.summary.totalDistanceM > 0;
                   const intensity = hasData ? dotIntensity(day.summary!.totalDistanceM) : null;
+                  const isDayLocked = isFreeLocked;
 
                   return (
                     <TouchableOpacity
                       key={day.date}
-                      style={styles.calCell}
-                      onPress={() => !day.isFuture && setSelectedDate(day.date)}
+                      style={[styles.calCell, isDayLocked && styles.calCellLocked]}
+                      onPress={() => {
+                        if (isDayLocked) { showPaywall(); return; }
+                        if (!day.isFuture) setSelectedDate(day.date);
+                      }}
                       disabled={day.isFuture}
                     >
                       <View style={[
@@ -234,6 +254,7 @@ export default function HistoryScreen() {
 
         </ScrollView>
       </SafeAreaView>
+      {paywallElement}
     </View>
   );
 }
@@ -351,4 +372,27 @@ const styles = StyleSheet.create({
   dayRowStats: { alignItems: 'flex-end' },
   dayRowDist: { color: COLORS.textPrimary, fontSize: FONT.sizes.md, fontWeight: FONT.weights.bold },
   dayRowSub: { color: COLORS.textMuted, fontSize: FONT.sizes.xs, marginTop: 1 },
+
+  // Soft-lock styles
+  lockBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: SPACING.xs,
+    backgroundColor: 'rgba(255,215,0,0.08)',
+    borderRadius: RADIUS.md,
+    borderWidth: 1,
+    borderColor: 'rgba(255,215,0,0.25)',
+    paddingHorizontal: SPACING.sm,
+    paddingVertical: 8,
+    marginBottom: SPACING.sm,
+  },
+  lockBannerText: {
+    flex: 1,
+    color: '#FFD700',
+    fontSize: FONT.sizes.xs,
+    fontWeight: FONT.weights.semibold,
+  },
+  calCellLocked: {
+    opacity: 0.35,
+  },
 });
