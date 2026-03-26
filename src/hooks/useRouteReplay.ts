@@ -106,11 +106,11 @@ export function useRouteReplay(date?: string): UseRouteReplayResult {
   const [interpolatedHead,setInterpolatedHead]= useState<ReplayLatLng | null>(null);
   const [bearing,         setBearing]         = useState(0);
   const [isPlaying,       setIsPlaying]       = useState(false);
-  const [speed,           setSpeedState]      = useState<PlaybackSpeed>(1);
+  const [speed,           setSpeedState]      = useState<PlaybackSpeed>(20);
 
   const timerRef         = useRef<ReturnType<typeof setInterval> | null>(null);
   const indexRef         = useRef(0);
-  const speedRef         = useRef<PlaybackSpeed>(1);
+  const speedRef         = useRef<PlaybackSpeed>(20);
   const totalRef         = useRef(0);
   const allPointsRef     = useRef<LocationPoint[]>([]);
   const allCoordsRef     = useRef<ReplayLatLng[]>([]);
