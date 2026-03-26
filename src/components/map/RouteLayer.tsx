@@ -59,10 +59,12 @@ export default function RouteLayer({ segments, showHead = true }: RouteLayerProp
   return (
     <>
       {validSegments.map((seg, i) => (
-        // Key includes length so MapLibre re-evaluates the source on every update
+        // Stable ID — MapLibre GeoJSONSource updates data in-place via the native
+        // bridge when the `data` prop changes. Changing the ID would throw inside
+        // useFrozenId and crash the JS thread.
         <GeoJSONSource
           key={`seg-${i}`}
-          id={`route-seg-${i}-${seg.length}`}
+          id={`route-seg-${i}`}
           data={toLine(seg)}
         >
           {/* Soft glow */}

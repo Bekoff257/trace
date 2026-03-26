@@ -21,6 +21,7 @@ import SectionLabel from '@components/ui/SectionLabel';
 import { COLORS, GRADIENTS, SPACING, FONT, RADIUS } from '@constants/theme';
 
 const USERNAME_REGEX = /^[a-zA-Z0-9_]+$/;
+const CHECK_TIMEOUT_MS = 4_000;
 
 export default function UsernameScreen() {
   const { t } = useTranslation();
@@ -29,7 +30,7 @@ export default function UsernameScreen() {
   const [value, setValue] = useState('');
   const [isChecking, setIsChecking] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
-  const [status, setStatus] = useState<'idle' | 'available' | 'taken' | 'invalid' | 'short'>('idle');
+  const [status, setStatus] = useState<'idle' | 'available' | 'taken' | 'invalid' | 'short' | 'network_error'>('idle');
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
@@ -43,20 +44,33 @@ export default function UsernameScreen() {
     setIsChecking(true);
     setStatus('idle');
     debounceRef.current = setTimeout(async () => {
-      const { data } = await supabase
-        .from('user_profiles')
-        .select('user_id')
-        .eq('username', trimmed)
-        .maybeSingle();
-      setIsChecking(false);
-      setStatus(data ? 'taken' : 'available');
+      try {
+        const timeout = new Promise<never>((_, reject) =>
+          setTimeout(() => reject(new Error('timeout')), CHECK_TIMEOUT_MS)
+        );
+        const query = supabase
+          .from('user_profiles')
+          .select('user_id')
+          .eq('username', trimmed)
+          .maybeSingle();
+        const { data, error } = await Promise.race([query, timeout]);
+        if (error) throw error;
+        setIsChecking(false);
+        setStatus(data ? 'taken' : 'available');
+      } catch {
+        // Timeout or offline — don't block the user, let server validate on save
+        setIsChecking(false);
+        setStatus('network_error');
+      }
     }, 500);
 
     return () => { if (debounceRef.current) clearTimeout(debounceRef.current); };
   }, [value]);
 
   async function handleCreate() {
-    if (!user?.id || status !== 'available') return;
+    if (!user?.id) return;
+    // Allow saving when available OR when we couldn't check (network_error)
+    if (status !== 'available' && status !== 'network_error') return;
     const trimmed = value.trim().toLowerCase();
     setIsSaving(true);
     try {
@@ -69,8 +83,10 @@ export default function UsernameScreen() {
       if (error) throw error;
       setUsername(trimmed);
       router.replace('/(tabs)');
-    } catch {
-      setStatus('taken');
+    } catch (err: any) {
+      // PostgreSQL unique violation (code 23505) means username is taken
+      const isUnique = err?.code === '23505' || err?.message?.includes('unique') || err?.message?.includes('duplicate');
+      setStatus(isUnique ? 'taken' : 'network_error');
     } finally {
       setIsSaving(false);
     }
@@ -82,6 +98,7 @@ export default function UsernameScreen() {
 
   const statusColor =
     status === 'available' ? COLORS.success :
+    status === 'network_error' ? COLORS.textMuted :
     status === 'taken' || status === 'invalid' || status === 'short' ? COLORS.error :
     'transparent';
 
@@ -90,6 +107,7 @@ export default function UsernameScreen() {
     status === 'taken' ? t('username.taken') :
     status === 'invalid' ? t('username.invalid') :
     status === 'short' ? t('username.tooShort') :
+    status === 'network_error' ? 'No connection — username will be checked on save' :
     '';
 
   return (
@@ -134,7 +152,11 @@ export default function UsernameScreen() {
           {statusText ? (
             <View style={styles.statusRow}>
               <Ionicons
-                name={status === 'available' ? 'checkmark-circle' : 'close-circle'}
+                name={
+                  status === 'available' ? 'checkmark-circle' :
+                  status === 'network_error' ? 'cloud-offline-outline' :
+                  'close-circle'
+                }
                 size={14}
                 color={statusColor}
               />

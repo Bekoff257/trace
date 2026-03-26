@@ -178,11 +178,19 @@ export async function markPointsSynced(ids: string[]): Promise<void> {
 }
 
 export async function getPointsForDate(userId: string, date: string): Promise<LocationPoint[]> {
+  // Compute the UTC offset so we query the full local day regardless of timezone.
+  // e.g. UTC-8: local midnight = 08:00Z, local end = next day 07:59Z
+  const offsetMin = new Date().getTimezoneOffset(); // minutes behind UTC (positive = west)
+  const startUtc = new Date(`${date}T00:00:00`);   // local midnight
+  const endUtc   = new Date(`${date}T23:59:59.999`); // local end of day
+  // Adjust for timezone: local time → UTC
+  startUtc.setMinutes(startUtc.getMinutes() + offsetMin);
+  endUtc.setMinutes(endUtc.getMinutes() + offsetMin);
   return withDB((db) => db.getAllAsync<any>(
     `SELECT * FROM location_points
      WHERE user_id = ? AND recorded_at >= ? AND recorded_at < ?
      ORDER BY recorded_at ASC`,
-    [userId, `${date}T00:00:00.000Z`, `${date}T23:59:59.999Z`]
+    [userId, startUtc.toISOString(), endUtc.toISOString()]
   )).then((rows) => rows.map(rowToLocationPoint));
 }
 
@@ -209,11 +217,16 @@ export async function upsertVisitSession(session: VisitSession): Promise<void> {
 }
 
 export async function getSessionsForDate(userId: string, date: string): Promise<VisitSession[]> {
+  const offsetMin = new Date().getTimezoneOffset();
+  const startUtc = new Date(`${date}T00:00:00`);
+  const endUtc   = new Date(`${date}T23:59:59.999`);
+  startUtc.setMinutes(startUtc.getMinutes() + offsetMin);
+  endUtc.setMinutes(endUtc.getMinutes() + offsetMin);
   return withDB((db) => db.getAllAsync<any>(
     `SELECT * FROM visit_sessions
      WHERE user_id = ? AND started_at >= ? AND started_at < ?
      ORDER BY started_at DESC`,
-    [userId, `${date}T00:00:00.000Z`, `${date}T23:59:59.999Z`]
+    [userId, startUtc.toISOString(), endUtc.toISOString()]
   )).then((rows) => rows.map(rowToVisitSession));
 }
 

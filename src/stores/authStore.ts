@@ -13,6 +13,9 @@ import { closeUserDB } from '@services/localDB';
 import type { User } from '@/types/index';
 import type { Session } from '@supabase/supabase-js';
 
+// ─── Auth-state subscription (module-level so initialize() can replace it) ───
+let _authSubscription: { unsubscribe: () => void } | null = null;
+
 // ─── Google Sign-In configuration ────────────────────────────────────────────
 // webClientId: OAuth 2.0 "Web application" client ID from Google Cloud Console.
 // It must match the client ID registered in your Supabase project's
@@ -98,7 +101,11 @@ export const useAuthStore = create<AuthState>((set) => ({
         isLoading: false,
       });
 
-      supabase.auth.onAuthStateChange(async (event, session) => {
+      // Remove any previous listener before registering a new one.
+      // initialize() can be called more than once (e.g. in dev Strict Mode),
+      // and stacking listeners causes duplicate state-sets and redirect loops.
+      _authSubscription?.unsubscribe();
+      const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
         // INITIAL_SESSION is handled by initialize() above.
         // SIGNED_OUT is handled synchronously by signOut() — skipping it
         // prevents a race where the async supabase.auth.signOut() fires its
@@ -114,6 +121,7 @@ export const useAuthStore = create<AuthState>((set) => ({
           isLoading: false,
         });
       });
+      _authSubscription = subscription;
     } catch {
       set({ isLoading: false, error: 'Failed to initialize auth' });
     }

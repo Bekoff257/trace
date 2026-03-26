@@ -147,7 +147,9 @@ export default function RootLayout() {
     return () => sub.remove();
   }, []);
 
-  if (!i18nReady) return null;
+  if (!i18nReady) {
+    return <View style={{ flex: 1, backgroundColor: COLORS.background }} />;
+  }
 
   return (
     <GestureHandlerRootView style={{ flex: 1 }}>

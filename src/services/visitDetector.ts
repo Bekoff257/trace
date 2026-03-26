@@ -38,11 +38,55 @@ const ctx: DetectorCtx = {
   userId: 'anonymous',
 };
 
+// ─── Wall-clock dwell timer ───────────────────────────────────────────────────
+// When the GPS filter is stationary it returns 'lock' for all new readings,
+// so processNewPoint is never called and the dwell counter never advances.
+// This interval checks elapsed wall time independently of GPS point delivery,
+// ensuring visits are confirmed even when the device is perfectly stationary.
+
+const DWELL_TICK_MS = 5_000;
+let _dwellTimer: ReturnType<typeof setInterval> | null = null;
+
+function startDwellTimer(): void {
+  if (_dwellTimer) return;
+  _dwellTimer = setInterval(() => {
+    if (ctx.state !== 'candidate' || !ctx.candidateStart || !ctx.clusterCenter) {
+      stopDwellTimer();
+      return;
+    }
+    const dwellSeconds = (Date.now() - ctx.candidateStart.getTime()) / 1000;
+    if (dwellSeconds >= TRACKING.VISIT_CONFIRM_SECONDS) {
+      ctx.state = 'visiting';
+      stopDwellTimer();
+      // Build a minimal synthetic point using the cluster centroid
+      const synthetic: LocationPoint = {
+        id:         `dwell_${ctx.userId}_${Date.now()}`,
+        userId:     ctx.userId,
+        lat:        ctx.clusterCenter.lat,
+        lng:        ctx.clusterCenter.lng,
+        accuracy:   10,
+        speed:      0,
+        recordedAt: new Date().toISOString(),
+        createdAt:  new Date().toISOString(),
+      };
+      openVisitSession(synthetic).catch(() => {});
+    }
+  }, DWELL_TICK_MS);
+}
+
+function stopDwellTimer(): void {
+  if (_dwellTimer) {
+    clearInterval(_dwellTimer);
+    _dwellTimer = null;
+  }
+}
+
 export function setDetectorUserId(userId: string): void {
   ctx.userId = userId;
 }
 
 export function resetDetector(): void {
+  stopDwellTimer();
   ctx.state = 'moving';
   ctx.candidateStart = null;
   ctx.clusterCenter = null;
@@ -71,6 +115,8 @@ export async function processNewPoint(point: LocationPoint): Promise<void> {
         ctx.candidateStart = new Date(point.recordedAt);
         ctx.clusterPoints = [point];
         ctx.clusterCenter = { lat: point.lat, lng: point.lng };
+        // Start wall-clock timer so dwell confirms even if GPS goes 'lock'
+        startDwellTimer();
       }
       break;
 
@@ -81,6 +127,7 @@ export async function processNewPoint(point: LocationPoint): Promise<void> {
         ctx.candidateStart = null;
         ctx.clusterPoints = [];
         ctx.clusterCenter = null;
+        stopDwellTimer();
         break;
       }
 
@@ -93,6 +140,7 @@ export async function processNewPoint(point: LocationPoint): Promise<void> {
       if (dwellSeconds >= TRACKING.VISIT_CONFIRM_SECONDS) {
         // Promoted to confirmed visit
         ctx.state = 'visiting';
+        stopDwellTimer();
         await openVisitSession(point);
       }
       break;
