@@ -27,7 +27,6 @@ import { useTimeline } from '@hooks/useTimeline';
 import { useRealtimeFriends } from '@hooks/useRealtimeFriends';
 import { usePremiumGate } from '@hooks/usePremiumGate';
 import { useBackgroundSnapper } from '@hooks/useBackgroundSnapper';
-import { initPublisher, stopPublisher } from '@services/friendLocationPublisher';
 import { COLORS, FONT, SPACING, RADIUS, GRADIENTS, SHADOWS } from '@constants/theme';
 import SectionLabel from '@components/ui/SectionLabel';
 import LiveIndicator from '@components/ui/LiveIndicator';
@@ -68,14 +67,6 @@ export default function HomeScreen() {
   // Realtime friends subscription
   useRealtimeFriends(user?.id);
 
-  // Start/stop friend location publisher with tracking
-  useEffect(() => {
-    if (isTracking && user?.id) {
-      initPublisher(user.id, user.username ?? undefined);
-    } else {
-      stopPublisher();
-    }
-  }, [isTracking, user?.id, user?.username]);
   const [mapFullscreen, setMapFullscreen] = useState(false);
   const [fullscreenInitCenter, setFullscreenInitCenter] = useState<[number, number]>(() =>
     lastPoint ? [lastPoint.lng, lastPoint.lat] : [-122.4194, 37.7749]
@@ -83,6 +74,8 @@ export default function HomeScreen() {
   const [is3D, setIs3D] = useState(false);
   const cameraRef = useRef<CameraRef>(null);
   const fullscreenCameraRef = useRef<CameraRef>(null);
+  // Prevents repeated recentering — only fly to user on the very first GPS fix
+  const hasCenteredRef = useRef(false);
 
   const flyToUser = () => {
     if (!lastPoint || !fullscreenCameraRef.current) return;
@@ -121,12 +114,14 @@ export default function HomeScreen() {
     return () => anim.stop();
   }, []);
 
-  // Fly camera to latest GPS point
+  // Fly camera to first valid GPS fix only — subsequent updates don't re-center
+  // so the user can pan freely after the initial position is established.
   useEffect(() => {
-    if (lastPoint && cameraRef.current) {
+    if (lastPoint && cameraRef.current && !hasCenteredRef.current) {
+      hasCenteredRef.current = true;
       cameraRef.current.flyTo({
         center: [lastPoint.lng, lastPoint.lat],
-        zoom: 14,
+        zoom: 16,
         duration: 800,
       });
     }
@@ -208,7 +203,7 @@ export default function HomeScreen() {
                 />
                 {isTracking && <UserLocation />}
                 {effectiveTrailStyle === 'lines'
-                  ? <RouteLayer segments={displaySegments} />
+                  ? <RouteLayer segments={displaySegments} showHead={!isTracking} />
                   : <FootstepsLayer coords={footstepsCoords} previewLimit={footstepsPreviewLimit} onLockPress={showPaywall} />
                 }
                 {is3D && (

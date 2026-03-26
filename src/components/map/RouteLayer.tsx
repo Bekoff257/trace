@@ -19,6 +19,12 @@ interface Coord {
 interface RouteLayerProps {
   /** Path broken into continuous segments. Each segment is rendered separately. */
   segments: Coord[][];
+  /**
+   * Whether to render the head dot at the tip of the route.
+   * Pass false when UserLocation is already visible on the map to avoid
+   * a double-dot at the current position. Defaults to true.
+   */
+  showHead?: boolean;
 }
 
 function toLine(coords: Coord[]): GeoJSON.Feature<GeoJSON.LineString> {
@@ -43,12 +49,12 @@ function toPoint(coord: Coord): GeoJSON.Feature<GeoJSON.Point> {
   };
 }
 
-export default function RouteLayer({ segments }: RouteLayerProps) {
+export default function RouteLayer({ segments, showHead = true }: RouteLayerProps) {
   const validSegments = segments.filter((s) => s.length > 1);
 
-  // Head dot: last point of last valid segment
+  // Head dot: last point of last valid segment (hidden when UserLocation is shown)
   const lastSeg = validSegments[validSegments.length - 1];
-  const head = lastSeg ? lastSeg[lastSeg.length - 1] : null;
+  const head = showHead && lastSeg ? lastSeg[lastSeg.length - 1] : null;
 
   return (
     <>

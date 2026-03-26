@@ -13,6 +13,7 @@ import {
 } from '@services/locationService';
 import { setDetectorUserId } from '@services/visitDetector';
 import { startAutoSync, stopAutoSync, runSync } from '@services/syncService';
+import { initPublisher, stopPublisher } from '@services/friendLocationPublisher';
 
 export function useLocation(): void {
   const { session, user } = useAuthStore();
@@ -23,17 +24,24 @@ export function useLocation(): void {
     if (!session || !user) {
       stopTracking();
       stopAutoSync();
+      stopPublisher();
       setTracking(false);
       setBackground(false);
       return;
     }
 
-    const userId = user.id;
+    const userId   = user.id;
+    const username = user.username ?? undefined;
     setTrackingUserId(userId);
     setDetectorUserId(userId);
 
     startTracking(userId).then((started) => {
       setTracking(started);
+      if (started) {
+        // Init here (not in a tab screen) so the publisher _userId is set
+        // before the first GPS point arrives, regardless of which tab is open.
+        initPublisher(userId, username);
+      }
     });
 
     startAutoSync(userId);
@@ -55,6 +63,7 @@ export function useLocation(): void {
 
     return () => {
       stopAutoSync();
+      stopPublisher();
       sub.remove();
     };
   }, [session?.access_token, user?.id]);

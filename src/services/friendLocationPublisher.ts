@@ -78,6 +78,11 @@ export async function initPublisher(userId: string, username?: string): Promise<
     // battery not available on all devices
   }
 
+  console.log(
+    `[Publisher] Initialised — userId=${userId} battery=${_batteryLevel?.toFixed(2) ?? 'n/a'}` +
+    ` charging=${_isCharging}`,
+  );
+
   _batterySubscription = Battery.addBatteryLevelListener(({ batteryLevel }) => {
     _batteryLevel = batteryLevel;
   });
@@ -140,6 +145,12 @@ export async function publishLocation(
   _lastPublishLng  = lng;
   _lastPublishTime = now;
 
+  console.log(
+    `[Publisher] Publishing — lat=${lat.toFixed(5)} lng=${lng.toFixed(5)}` +
+    ` speed=${speed.toFixed(2)}m/s battery=${_batteryLevel?.toFixed(2) ?? 'n/a'}` +
+    ` charging=${_isCharging}`,
+  );
+
   try {
     await supabase.from('friend_locations').upsert(
       {
@@ -158,6 +169,7 @@ export async function publishLocation(
     // non-critical — don't crash tracking
     // Reset time so the next call retries promptly
     _lastPublishTime = 0;
+    console.warn('[Publisher] Upsert failed — will retry on next GPS fix');
   }
 }
 
