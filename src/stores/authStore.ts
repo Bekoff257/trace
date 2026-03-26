@@ -8,8 +8,10 @@ import {
 } from '@react-native-google-signin/google-signin';
 import { supabase } from '@services/supabaseClient';
 import { useLocationStore } from '@stores/locationStore';
+import { usePlanStore } from '@stores/planStore';
 import { resetDetector } from '@services/visitDetector';
 import { closeUserDB } from '@services/localDB';
+import { logOutRC } from '@services/purchaseService';
 import type { User } from '@/types/index';
 import type { Session } from '@supabase/supabase-js';
 
@@ -217,6 +219,9 @@ export const useAuthStore = create<AuthState>((set) => ({
     useLocationStore.getState().clearPoints();
     resetDetector();
     closeUserDB().catch(() => {});
+    // Reset premium status and sign out of RevenueCat
+    usePlanStore.getState().setPremium(false);
+    logOutRC().catch(() => {});
     supabase.auth.signOut().catch(() => {}); // best-effort server-side revoke
   },
 

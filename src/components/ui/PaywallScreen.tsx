@@ -327,15 +327,26 @@ function StickyCTA({ onUpgrade, onDismiss, isPurchasing, disabled }: StickyCTAPr
         {/* Pulse glow behind button */}
         <Animated.View style={[styles.ctaGlow, glowStyle]} />
 
-        <TouchableOpacity style={styles.ctaBtn} onPress={onUpgrade} activeOpacity={0.88}>
+        <TouchableOpacity
+          style={[styles.ctaBtn, (disabled || isPurchasing) && { opacity: 0.6 }]}
+          onPress={onUpgrade}
+          activeOpacity={0.88}
+          disabled={disabled || isPurchasing}
+        >
           <LinearGradient
             colors={['#FDE047', GOLD, '#F59E0B']}
             start={{ x: 0, y: 0 }}
             end={{ x: 1, y: 0 }}
             style={styles.ctaBtnGrad}
           >
-            <Ionicons name="star" size={16} color="#1a1100" style={{ marginRight: 6 }} />
-            <Text style={styles.ctaBtnText}>Unlock Premium</Text>
+            {isPurchasing ? (
+              <ActivityIndicator size="small" color="#1a1100" />
+            ) : (
+              <>
+                <Ionicons name="star" size={16} color="#1a1100" style={{ marginRight: 6 }} />
+                <Text style={styles.ctaBtnText}>Unlock Premium</Text>
+              </>
+            )}
           </LinearGradient>
         </TouchableOpacity>
 
@@ -898,5 +909,18 @@ const styles = StyleSheet.create({
   ctaFooterDot: {
     color: '#303040',
     fontSize: FONT.sizes.md,
+  },
+
+  // Restore
+  restoreBtn: {
+    alignSelf: 'center',
+    paddingVertical: SPACING.sm,
+    paddingHorizontal: SPACING.md,
+    marginBottom: SPACING.sm,
+  },
+  restoreText: {
+    color: 'rgba(255,255,255,0.30)',
+    fontSize: FONT.sizes.sm,
+    textDecorationLine: 'underline',
   },
 });

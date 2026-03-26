@@ -12,7 +12,12 @@
           "package_name": "com.locationtracker.app"
         }
       },
-      "oauth_client": [],
+      "oauth_client": [
+        {
+          "client_id": "689110016323-fj6q4r2mftqkqpuh98jm86s1kcqf2i8m.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
       "api_key": [
         {
           "current_key": "AIzaSyAwjmZr4aUMdxmG8lgS8Cj73pxXZnpL0pY"
@@ -20,7 +25,12 @@
       ],
       "services": {
         "appinvite_service": {
-          "other_platform_oauth_client": []
+          "other_platform_oauth_client": [
+            {
+              "client_id": "689110016323-fj6q4r2mftqkqpuh98jm86s1kcqf2i8m.apps.googleusercontent.com",
+              "client_type": 3
+            }
+          ]
         }
       }
     }

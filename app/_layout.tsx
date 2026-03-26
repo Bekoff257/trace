@@ -21,6 +21,8 @@ import { COLORS } from '@constants/theme';
 import { registerForPushNotifications, setupNotificationTapHandler } from '@services/notificationService';
 import { openUserDB, getPointsForDate } from '@services/localDB';
 import { todayDateString } from '@services/summaryService';
+import { initPurchases, checkPremiumStatus } from '@services/purchaseService';
+import { usePlanStore } from '@stores/planStore';
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -63,6 +65,35 @@ function NotificationManager() {
     registerForPushNotifications(session.user.id);
     return setupNotificationTapHandler();
   }, [session?.user?.id]);
+
+  return null;
+}
+
+/**
+ * Initializes RevenueCat once a user session is available, loads the cached
+ * plan status instantly, then verifies it against RC in the background.
+ */
+function PurchaseManager() {
+  const { session } = useAuthStore();
+  const { loadCachedPlan, setPremium, setVerifyingPlan } = usePlanStore();
+  const userId = session?.user?.id ?? null;
+
+  useEffect(() => {
+    if (!userId) return;
+
+    // Load cached plan immediately so the UI reflects the last known state
+    loadCachedPlan();
+
+    // Init RC and verify real status in the background
+    setVerifyingPlan(true);
+    initPurchases(userId)
+      .then(() => checkPremiumStatus())
+      .then((isPremium) => {
+        if (isPremium !== null) return setPremium(isPremium);
+      })
+      .catch(() => {})
+      .finally(() => setVerifyingPlan(false));
+  }, [userId]);
 
   return null;
 }
@@ -173,6 +204,7 @@ export default function RootLayout() {
           </Stack>
           <AuthGate />
           <DBManager />
+          <PurchaseManager />
           <LocationManager />
           <NotificationManager />
           <HistoryHydrator />
