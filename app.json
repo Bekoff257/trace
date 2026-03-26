@@ -106,7 +106,8 @@
           "sounds": []
         }
       ],
-      "@react-native-google-signin/google-signin"
+      "@react-native-google-signin/google-signin",
+      "react-native-purchases"
     ],
     "experiments": {
       "typedRoutes": true

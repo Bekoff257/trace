@@ -26,6 +26,8 @@ import {
   Dimensions,
   Platform,
   FlatList,
+  Alert,
+  ActivityIndicator,
   ViewToken,
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -41,7 +43,9 @@ import Animated, {
   Easing,
 } from 'react-native-reanimated';
 import Svg, { Path, Circle, Rect, Defs, RadialGradient, Stop } from 'react-native-svg';
+import { type PurchasesPackage, PACKAGE_TYPE } from 'react-native-purchases';
 import { usePlanStore } from '@stores/planStore';
+import { fetchOfferings, purchasePackage, restorePurchases } from '@services/purchaseService';
 import { FONT, RADIUS, SPACING } from '@constants/theme';
 
 // ─── Constants ────────────────────────────────────────────────────────────────
@@ -294,9 +298,11 @@ function PricingOption({ period, price, sub, badge, selected, onSelect }: Pricin
 interface StickyCTAProps {
   onUpgrade: () => void;
   onDismiss: () => void;
+  isPurchasing?: boolean;
+  disabled?: boolean;
 }
 
-function StickyCTA({ onUpgrade, onDismiss }: StickyCTAProps) {
+function StickyCTA({ onUpgrade, onDismiss, isPurchasing, disabled }: StickyCTAProps) {
   const glow = useSharedValue(0.7);
 
   useEffect(() => {
@@ -370,13 +376,84 @@ interface PaywallScreenProps {
 }
 
 export default function PaywallScreen({ visible, onClose }: PaywallScreenProps) {
-  const { setUserPlan } = usePlanStore();
-  const [plan, setPlan] = useState<'yearly' | 'monthly'>('yearly');
+  const { setPremium } = usePlanStore();
 
-  function handleUpgrade() {
-    setUserPlan('premium');
-    onClose();
+  // RC packages: null = loading, [] = failed/unavailable
+  const [packages, setPackages]   = useState<PurchasesPackage[] | null>(null);
+  const [selectedPkg, setSelectedPkg] = useState<PurchasesPackage | null>(null);
+  const [isPurchasing, setIsPurchasing] = useState(false);
+  const [isRestoring,  setIsRestoring]  = useState(false);
+
+  // ── Load offerings when paywall opens ──────────────────────────────────────
+  useEffect(() => {
+    if (!visible) return;
+    setPackages(null);
+    fetchOfferings().then((offerings) => {
+      const pkgs = offerings?.current?.availablePackages ?? [];
+      setPackages(pkgs);
+      // Auto-select the annual package if available, otherwise first
+      const annual = pkgs.find((p) => p.packageType === PACKAGE_TYPE.ANNUAL);
+      setSelectedPkg(annual ?? pkgs[0] ?? null);
+    });
+  }, [visible]);
+
+  // ── Purchase ──────────────────────────────────────────────────────────────
+  async function handleUpgrade() {
+    if (!selectedPkg || isPurchasing) return;
+    setIsPurchasing(true);
+    try {
+      const result = await purchasePackage(selectedPkg);
+      if (result.success) {
+        await setPremium(true);
+        onClose();
+      } else if (!result.cancelled && result.error) {
+        Alert.alert('Purchase Failed', result.error);
+      }
+      // cancelled → silent, do nothing
+    } finally {
+      setIsPurchasing(false);
+    }
   }
+
+  // ── Restore ───────────────────────────────────────────────────────────────
+  async function handleRestore() {
+    if (isRestoring) return;
+    setIsRestoring(true);
+    try {
+      const { isPremium, error } = await restorePurchases();
+      if (isPremium) {
+        await setPremium(true);
+        onClose();
+      } else {
+        Alert.alert(
+          'No Purchases Found',
+          error ?? 'We couldn\'t find any previous purchases linked to your account.',
+        );
+      }
+    } finally {
+      setIsRestoring(false);
+    }
+  }
+
+  // ── Derive display info from RC package ───────────────────────────────────
+  function getPkgDisplay(pkg: PurchasesPackage): { period: 'yearly' | 'monthly'; price: string; sub: string; badge?: string } {
+    const isAnnual = pkg.packageType === PACKAGE_TYPE.ANNUAL;
+    const price    = pkg.product.priceString;
+    if (isAnnual) {
+      const monthly = pkg.product.price / 12;
+      const subText = `~${pkg.product.currencyCode ?? ''}${monthly.toFixed(2)} per month`;
+      return { period: 'yearly', price, sub: subText, badge: 'Best Value' };
+    }
+    return { period: 'monthly', price, sub: 'Billed monthly' };
+  }
+
+  // ── Fallback pricing (shown while loading or if RC unavailable) ────────────
+  const fallbackPackages = [
+    { id: 'yearly',  period: 'yearly'  as const, price: '$19.99/yr', sub: '~$1.67 per month', badge: 'Best Value' },
+    { id: 'monthly', period: 'monthly' as const, price: '$2.99/mo',  sub: 'Billed monthly' },
+  ];
+
+  const isLoading = packages === null;
 
   return (
     <Modal
@@ -451,31 +528,62 @@ export default function PaywallScreen({ visible, onClose }: PaywallScreenProps) 
           {/* Pricing */}
           <View style={styles.section}>
             <Text style={styles.sectionTitle}>Choose your plan</Text>
-            <View style={styles.pricingList}>
-              <PricingOption
-                period="yearly"
-                price="$19.99/yr"
-                sub="~$1.67 per month"
-                badge="Save 40%"
-                selected={plan === 'yearly'}
-                onSelect={() => setPlan('yearly')}
-              />
-              <PricingOption
-                period="monthly"
-                price="$2.99/mo"
-                sub="Billed monthly"
-                selected={plan === 'monthly'}
-                onSelect={() => setPlan('monthly')}
-              />
-            </View>
+            {isLoading ? (
+              <ActivityIndicator color={GOLD} style={{ marginTop: 16 }} />
+            ) : packages && packages.length > 0 ? (
+              <View style={styles.pricingList}>
+                {packages.map((pkg) => {
+                  const { period, price, sub, badge } = getPkgDisplay(pkg);
+                  return (
+                    <PricingOption
+                      key={pkg.identifier}
+                      period={period}
+                      price={price}
+                      sub={sub}
+                      badge={badge}
+                      selected={selectedPkg?.identifier === pkg.identifier}
+                      onSelect={() => setSelectedPkg(pkg)}
+                    />
+                  );
+                })}
+              </View>
+            ) : (
+              // Fallback UI when RC is unavailable (no API key set or offline)
+              <View style={styles.pricingList}>
+                {fallbackPackages.map((p) => (
+                  <PricingOption
+                    key={p.id}
+                    period={p.period}
+                    price={p.price}
+                    sub={p.sub}
+                    badge={p.badge}
+                    selected={false}
+                    onSelect={() => {}}
+                  />
+                ))}
+              </View>
+            )}
           </View>
+
+          {/* Restore purchases link */}
+          <TouchableOpacity onPress={handleRestore} activeOpacity={0.7} style={styles.restoreBtn}>
+            {isRestoring
+              ? <ActivityIndicator size="small" color="rgba(255,255,255,0.35)" />
+              : <Text style={styles.restoreText}>Restore Purchases</Text>
+            }
+          </TouchableOpacity>
 
           {/* Bottom spacing so sticky bar doesn't cover content */}
           <View style={{ height: 160 }} />
         </ScrollView>
 
         {/* ── Sticky CTA ── */}
-        <StickyCTA onUpgrade={handleUpgrade} onDismiss={onClose} />
+        <StickyCTA
+          onUpgrade={handleUpgrade}
+          onDismiss={onClose}
+          isPurchasing={isPurchasing}
+          disabled={!selectedPkg || isLoading}
+        />
       </View>
     </Modal>
   );

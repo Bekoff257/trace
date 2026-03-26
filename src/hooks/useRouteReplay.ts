@@ -115,9 +115,10 @@ export function useRouteReplay(date?: string): UseRouteReplayResult {
   const allPointsRef     = useRef<LocationPoint[]>([]);
   const allCoordsRef     = useRef<ReplayLatLng[]>([]);
 
-  // Time-accurate playback anchors (reset on play/seek/speed-change)
-  const playStartWallRef = useRef(0); // wall-clock ms when anchored
-  const playStartGpsRef  = useRef(0); // GPS ms at anchor index
+  // Fractional point position — allows sub-point interpolation without
+  // tying playback speed to GPS timestamp gaps.
+  // At speed 1×: advances 0.5 pts/tick → ~10 pts/sec → ~500-pt day in ~50s.
+  const fracRef = useRef(0);
 
   // ── Precomputed coordinates ──────────────────────────────────────────────────
 
@@ -166,6 +167,7 @@ export function useRouteReplay(date?: string): UseRouteReplayResult {
     setInterpolatedHead(null);
     setBearing(0);
     indexRef.current = 0;
+    fracRef.current  = 0;
 
     Promise.all([
       getPointsForDate(user.id, targetDate),
@@ -195,38 +197,39 @@ export function useRouteReplay(date?: string): UseRouteReplayResult {
 
   useEffect(() => () => stopTicker(), [stopTicker]);
 
+  // Points advanced per tick (TICKER_MS) at speed 1×.
+  // 0.5 pts/tick × 20 ticks/sec = 10 pts/sec at 1× → a 500-point day plays
+  // in ~50 s; at 20× it plays in ~2.5 s.
+  const STEP_PER_TICK = 0.5;
+
   const advancePlayback = useCallback(() => {
-    const pts    = allPointsRef.current;
     const coords = allCoordsRef.current;
     const total  = totalRef.current;
     if (total === 0) return;
 
-    const wallElapsed = Date.now() - playStartWallRef.current;
-    const gpsTargetMs = playStartGpsRef.current + wallElapsed * speedRef.current;
+    fracRef.current += STEP_PER_TICK * speedRef.current;
 
-    // Scan forward from current index until we overshoot the GPS target
-    let idx = indexRef.current;
-    while (idx < total - 1) {
-      if (new Date(pts[idx + 1].recordedAt).getTime() > gpsTargetMs) break;
-      idx++;
-    }
-
-    indexRef.current = idx;
-    setCurrentIndex(idx);
-
-    if (idx < total - 1) {
-      const fromMs = new Date(pts[idx].recordedAt).getTime();
-      const toMs   = new Date(pts[idx + 1].recordedAt).getTime();
-      const span   = toMs - fromMs;
-      const t      = span > 0 ? Math.min(1, (gpsTargetMs - fromMs) / span) : 0;
-      setInterpolatedHead(lerp(coords[idx], coords[idx + 1], t));
-      setBearing(computeBearing(coords[idx], coords[idx + 1]));
-    } else {
+    if (fracRef.current >= total - 1) {
       // Reached end
+      fracRef.current    = total - 1;
+      indexRef.current   = total - 1;
+      setCurrentIndex(total - 1);
       if (coords[total - 1]) setInterpolatedHead(coords[total - 1]);
       stopTicker();
       setIsPlaying(false);
+      return;
     }
+
+    const idx = Math.floor(fracRef.current);
+    const t   = fracRef.current - idx; // 0–1 fraction toward next point
+
+    if (idx !== indexRef.current) {
+      indexRef.current = idx;
+      setCurrentIndex(idx);
+    }
+
+    setInterpolatedHead(lerp(coords[idx], coords[idx + 1], t));
+    setBearing(computeBearing(coords[idx], coords[idx + 1]));
   }, [stopTicker]);
 
   const startTicker = useCallback(() => {
@@ -236,28 +239,19 @@ export function useRouteReplay(date?: string): UseRouteReplayResult {
 
   // ── Helpers ───────────────────────────────────────────────────────────────────
 
-  /** Record the GPS time anchor so playback resumes from the correct position. */
-  const anchorNow = useCallback((idx: number) => {
-    const pt = allPointsRef.current[idx];
-    if (pt) {
-      playStartWallRef.current = Date.now();
-      playStartGpsRef.current  = new Date(pt.recordedAt).getTime();
-    }
-  }, []);
-
   // ── Controls ──────────────────────────────────────────────────────────────────
 
   const play = useCallback(() => {
     const total = totalRef.current;
     if (total === 0) return;
-    if (indexRef.current >= total - 1) {
+    if (fracRef.current >= total - 1) {
+      fracRef.current  = 0;
       indexRef.current = 0;
       setCurrentIndex(0);
     }
-    anchorNow(indexRef.current);
     setIsPlaying(true);
     startTicker();
-  }, [anchorNow, startTicker]);
+  }, [startTicker]);
 
   const pause = useCallback(() => {
     stopTicker();
@@ -266,29 +260,28 @@ export function useRouteReplay(date?: string): UseRouteReplayResult {
 
   const restart = useCallback(() => {
     stopTicker();
+    fracRef.current  = 0;
     indexRef.current = 0;
     setCurrentIndex(0);
     setInterpolatedHead(null);
-    anchorNow(0);
     setIsPlaying(true);
     startTicker();
-  }, [anchorNow, startTicker, stopTicker]);
+  }, [startTicker, stopTicker]);
 
   const seekTo = useCallback((index: number) => {
     const clamped = Math.max(0, Math.min(index, totalRef.current - 1));
+    fracRef.current  = clamped;
     indexRef.current = clamped;
     setCurrentIndex(clamped);
     const coord = allCoordsRef.current[clamped];
     if (coord) setInterpolatedHead(coord);
-    anchorNow(clamped);
-  }, [anchorNow]);
+  }, []);
 
   const handleSetSpeed = useCallback((s: PlaybackSpeed) => {
     setSpeedState(s);
     speedRef.current = s;
-    // Re-anchor from current position so the speed change is seamless
-    anchorNow(indexRef.current);
-  }, [anchorNow]);
+    // fracRef stays at current fractional position — speed change is instant
+  }, []);
 
   // ── Derived segments ──────────────────────────────────────────────────────────
 
