@@ -1,31 +1,63 @@
 /**
  * Local SQLite database — offline-first store for raw location points,
- * visit sessions, and daily summaries. Uses expo-sqlite v14 async API.
+ * visit sessions, and daily summaries.
+ *
+ * Each user gets an isolated database file: app_user_{userId}.db
+ * Call openUserDB(userId) after sign-in and closeUserDB() after sign-out.
  */
 import * as SQLite from 'expo-sqlite';
 import type { LocationPoint, VisitSession, DailySummary } from '@/types/index';
 
-let _db: SQLite.SQLiteDatabase | null = null;
-let _initPromise: Promise<SQLite.SQLiteDatabase> | null = null;
+// ─── Per-user DB lifecycle ────────────────────────────────────────────────────
 
-async function getDB(): Promise<SQLite.SQLiteDatabase> {
-  if (_db) return _db;
-  // Prevent concurrent open+migrate calls from racing each other
-  if (_initPromise) return _initPromise;
+let _db: SQLite.SQLiteDatabase | null = null;
+let _initPromise: Promise<void> | null = null;
+let _currentUserId: string | null = null;
+
+function dbName(userId: string): string {
+  return `app_user_${userId.replace(/[^a-zA-Z0-9]/g, '_')}.db`;
+}
+
+/**
+ * Open (or reuse) the database for this user.
+ * Safe to call multiple times — no-ops if same user's DB is already open.
+ * Must be called before any DB reads/writes.
+ */
+export async function openUserDB(userId: string): Promise<void> {
+  if (_currentUserId === userId && _db) return; // already open for this user
+
+  // Close any existing connection
+  await closeUserDB();
+
+  _currentUserId = userId;
   _initPromise = (async () => {
-    try {
-      const db = await SQLite.openDatabaseAsync('location_tracker.db');
-      await migrate(db);
-      _db = db;
-      return db;
-    } catch (e) {
-      _db = null;
-      throw e;
-    } finally {
-      _initPromise = null;
-    }
+    const db = await SQLite.openDatabaseAsync(dbName(userId));
+    await migrate(db);
+    _db = db;
   })();
-  return _initPromise;
+
+  try {
+    await _initPromise;
+  } finally {
+    _initPromise = null;
+  }
+}
+
+/**
+ * Close the current user's database and clear all references.
+ * Call on sign-out.
+ */
+export async function closeUserDB(): Promise<void> {
+  // Wait for any pending open to finish first
+  if (_initPromise) {
+    try { await _initPromise; } catch {}
+    _initPromise = null;
+  }
+  if (_db) {
+    try { await _db.closeAsync(); } catch {}
+    _db = null;
+  }
+  _currentUserId = null;
 }
 
 function isStaleHandleError(err: any): boolean {
@@ -39,14 +71,22 @@ function isStaleHandleError(err: any): boolean {
   );
 }
 
+async function getDB(): Promise<SQLite.SQLiteDatabase> {
+  // Wait for a pending open
+  if (_initPromise) await _initPromise;
+  if (_db) return _db;
+  throw new Error('[LocalDB] No database open. Call openUserDB(userId) first.');
+}
+
 async function withDB<T>(fn: (db: SQLite.SQLiteDatabase) => Promise<T>): Promise<T> {
   try {
     const db = await getDB();
     return await fn(db);
   } catch (err: any) {
-    if (isStaleHandleError(err)) {
+    if (isStaleHandleError(err) && _currentUserId) {
+      // Stale handle — reopen and retry once
       _db = null;
-      _initPromise = null;
+      await openUserDB(_currentUserId);
       const db = await getDB();
       return await fn(db);
     }
@@ -132,7 +172,9 @@ export async function getUnsyncedPoints(userId: string, limit = 500): Promise<Lo
 export async function markPointsSynced(ids: string[]): Promise<void> {
   if (ids.length === 0) return;
   const placeholders = ids.map(() => '?').join(',');
-  await withDB((db) => db.runAsync(`UPDATE location_points SET synced = 1 WHERE id IN (${placeholders})`, ids));
+  await withDB((db) => db.runAsync(
+    `UPDATE location_points SET synced = 1 WHERE id IN (${placeholders})`, ids
+  ));
 }
 
 export async function getPointsForDate(userId: string, date: string): Promise<LocationPoint[]> {
@@ -200,7 +242,9 @@ export async function getUnsyncedSessions(userId: string): Promise<VisitSession[
 export async function markSessionsSynced(ids: string[]): Promise<void> {
   if (ids.length === 0) return;
   const placeholders = ids.map(() => '?').join(',');
-  await withDB((db) => db.runAsync(`UPDATE visit_sessions SET synced = 1 WHERE id IN (${placeholders})`, ids));
+  await withDB((db) => db.runAsync(
+    `UPDATE visit_sessions SET synced = 1 WHERE id IN (${placeholders})`, ids
+  ));
 }
 
 // ─── Daily Summaries ──────────────────────────────────────────────────────────

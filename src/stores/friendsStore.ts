@@ -2,6 +2,7 @@ import { create } from 'zustand';
 import type { Friend, FriendLocation, FriendProfile } from '@/types/index';
 import { supabase } from '@services/supabaseClient';
 import { speedToStatus } from '@services/friendLocationPublisher';
+import { getPushToken, sendPushNotification } from '@services/notificationService';
 
 export interface PendingRequest {
   id: string;
@@ -23,14 +24,36 @@ interface FriendsState {
   removeFriend: (userId: string, friendId: string) => Promise<void>;
 }
 
-// Expo Push API — fire-and-forget, no key needed for client-side sends
-function sendExpoPush(token: string, title: string, body: string, data: Record<string, string>) {
-  fetch('https://exp.host/--/api/v2/push/send', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
-    body: JSON.stringify({ to: token, title, body, data, sound: 'default' }),
-  }).catch(() => {});
+// ─── Stale detection ──────────────────────────────────────────────────────────
+
+const STALE_THRESHOLD_MS = 60_000; // location is considered stale after 60 s
+
+/**
+ * Returns true if a friend's location has not been updated in > 60 seconds.
+ * Use this in UI components to switch from "live" to "last seen" display.
+ */
+export function isFriendStale(updatedAt: string | undefined): boolean {
+  if (!updatedAt) return true;
+  return Date.now() - new Date(updatedAt).getTime() > STALE_THRESHOLD_MS;
 }
+
+/**
+ * Returns a human-readable "last seen" string, or null if the location is fresh.
+ * Examples: "Just now", "2 min ago", "15 min ago"
+ */
+export function getLastSeenText(updatedAt: string | undefined): string {
+  if (!updatedAt) return 'Unknown';
+  const diffMs = Date.now() - new Date(updatedAt).getTime();
+  if (diffMs < 10_000) return 'Just now';
+  if (diffMs < 60_000) return `${Math.floor(diffMs / 1000)}s ago`;
+  const mins = Math.floor(diffMs / 60_000);
+  if (mins === 1) return '1 min ago';
+  if (mins < 60) return `${mins} min ago`;
+  const hrs = Math.floor(mins / 60);
+  return hrs === 1 ? '1 hr ago' : `${hrs} hrs ago`;
+}
+
+// ─── Push notifications ───────────────────────────────────────────────────────
 
 export const useFriendsStore = create<FriendsState>((set, get) => ({
   friends: [],
@@ -168,16 +191,17 @@ export const useFriendsStore = create<FriendsState>((set, get) => ({
 
       // Notify recipient via push
       try {
-        const [senderRes, recipientRes] = await Promise.all([
+        const [senderRes, recipientToken] = await Promise.all([
           supabase.from('user_profiles').select('display_name').eq('user_id', userId).maybeSingle(),
-          supabase.from('users').select('push_token').eq('id', profile.user_id).maybeSingle(),
+          getPushToken(profile.user_id),
         ]);
-        if (recipientRes.data?.push_token) {
-          sendExpoPush(
-            recipientRes.data.push_token,
+        if (recipientToken) {
+          sendPushNotification(
+            recipientToken,
             'New Friend Request',
             `${senderRes.data?.display_name ?? 'Someone'} wants to be your friend`,
             { type: 'friend_request' },
+            profile.user_id,  // pass recipient ID for DeviceNotRegistered cleanup
           );
         }
       } catch {}
@@ -207,18 +231,19 @@ export const useFriendsStore = create<FriendsState>((set, get) => ({
     // Notify the original sender that their request was accepted
     if (friendship?.user_id) {
       try {
-        const [senderPushRes, acceptorNameRes] = await Promise.all([
-          supabase.from('users').select('push_token').eq('id', friendship.user_id).maybeSingle(),
+        const [senderToken, acceptorNameRes] = await Promise.all([
+          getPushToken(friendship.user_id),
           currentUserId
             ? supabase.from('user_profiles').select('display_name').eq('user_id', currentUserId).maybeSingle()
             : Promise.resolve({ data: null }),
         ]);
-        if (senderPushRes.data?.push_token) {
-          sendExpoPush(
-            senderPushRes.data.push_token,
+        if (senderToken) {
+          sendPushNotification(
+            senderToken,
             'Friend Request Accepted!',
             `${acceptorNameRes.data?.display_name ?? 'Someone'} accepted your friend request`,
             { type: 'friend_accepted' },
+            friendship.user_id, // pass sender ID for DeviceNotRegistered cleanup
           );
         }
       } catch {}

@@ -71,39 +71,47 @@ function BatteryBar({ level, charging }: { level: number; charging?: boolean }) 
 // ─── Smooth position hook ─────────────────────────────────────────────────────
 
 const ANIM_DURATION = 800; // ms
+// ~1 m in degrees — skip animation if position hasn't meaningfully changed
+const SAME_POS_DEG  = 0.000009;
 
 function useSmoothPosition(lat: number, lng: number) {
   const [pos, setPos] = useState({ lat, lng });
-  const fromRef  = useRef({ lat, lng });
-  const rafRef   = useRef<number | null>(null);
+  // Tracks the CURRENT VISUAL (animated) position — not the previous target.
+  // This ensures that if a new update arrives mid-animation, the next animation
+  // starts from where the dot actually IS on screen rather than snapping to the
+  // previous target and then animating from there.
+  const currentPosRef = useRef({ lat, lng });
+  const rafRef        = useRef<number | null>(null);
 
   useEffect(() => {
-    const from = fromRef.current;
+    const from = { ...currentPosRef.current }; // start from current visual position
     const to   = { lat, lng };
 
-    // Skip animation if essentially same position (< ~1 m)
-    if (Math.abs(to.lat - from.lat) < 0.000009 && Math.abs(to.lng - from.lng) < 0.000009) return;
+    // Skip if the destination is essentially unchanged (< ~1 m)
+    if (
+      Math.abs(to.lat - from.lat) < SAME_POS_DEG &&
+      Math.abs(to.lng - from.lng) < SAME_POS_DEG
+    ) return;
 
-    // Update ref immediately so a rapid second prop change starts from the right place
-    fromRef.current = to;
+    if (rafRef.current) cancelAnimationFrame(rafRef.current);
 
     const startTime = performance.now();
 
     const step = (now: number) => {
-      const t     = Math.min(1, (now - startTime) / ANIM_DURATION);
-      const ease  = 1 - (1 - t) ** 3; // cubic ease-out
-      setPos({
+      const t    = Math.min(1, (now - startTime) / ANIM_DURATION);
+      const ease = 1 - (1 - t) ** 3; // cubic ease-out
+      const next = {
         lat: from.lat + (to.lat - from.lat) * ease,
         lng: from.lng + (to.lng - from.lng) * ease,
-      });
+      };
+      currentPosRef.current = next; // keep ref in sync with animated position
+      setPos(next);
       if (t < 1) {
         rafRef.current = requestAnimationFrame(step);
       }
     };
 
-    if (rafRef.current) cancelAnimationFrame(rafRef.current);
     rafRef.current = requestAnimationFrame(step);
-
     return () => { if (rafRef.current) cancelAnimationFrame(rafRef.current); };
   }, [lat, lng]);
 
@@ -117,14 +125,21 @@ interface FriendMarkerProps {
   onPress?: (friend: Friend) => void;
 }
 
+// Age thresholds for friend location freshness
+const STALE_MS   = 60_000;       // >60 s  → stale  (location may be outdated)
+const OFFLINE_MS = 5 * 60_000;   // >5 min → offline (friend is not actively sharing)
+
 function FriendMarkerInner({ friend, onPress }: FriendMarkerProps) {
   if (!friend.location) return null;
 
   const { lat, lng, batteryLevel, isCharging, status, updatedAt } = friend.location;
-  const pos      = useSmoothPosition(lat, lng);
-  const isOffline = Date.now() - new Date(updatedAt).getTime() > 5 * 60 * 1000;
+  const pos = useSmoothPosition(lat, lng);
 
-  const ringColor   = isOffline ? COLORS.textMuted : STATUS_COLOR[status];
+  const age       = Date.now() - new Date(updatedAt).getTime();
+  const isStale   = age > STALE_MS;
+  const isOffline = age > OFFLINE_MS;
+
+  const ringColor   = isOffline ? COLORS.textMuted : isStale ? COLORS.warning : STATUS_COLOR[status];
   const displayName = friend.displayName.split(' ')[0];
   const label       = friend.username ? `@${friend.username}` : displayName;
 
@@ -170,14 +185,16 @@ function FriendMarkerInner({ friend, onPress }: FriendMarkerProps) {
           {/* First name */}
           <Text style={styles.name} numberOfLines={1}>{displayName}</Text>
 
-          {/* Battery — only when online */}
-          {!isOffline && batteryLevel != null && (
+          {/* Battery — only when fresh */}
+          {!isStale && batteryLevel != null && (
             <BatteryBar level={batteryLevel} charging={isCharging} />
           )}
 
-          {/* Last seen — only when offline */}
-          {isOffline && (
-            <Text style={styles.lastSeen}>{getLastSeen(updatedAt)}</Text>
+          {/* Last seen — when stale or offline */}
+          {isStale && (
+            <Text style={[styles.lastSeen, isOffline && styles.lastSeenOffline]}>
+              {getLastSeen(updatedAt)}
+            </Text>
           )}
         </View>
 
@@ -188,7 +205,9 @@ function FriendMarkerInner({ friend, onPress }: FriendMarkerProps) {
   );
 }
 
-// Memoize: only re-render when the friend data actually changes
+// Memoize: only re-render when the friend data actually changes.
+// Note: staleness (isStale / isOffline) is computed from updatedAt inside the
+// component, so it updates whenever updatedAt changes — no extra memo logic needed.
 export default memo(FriendMarkerInner, (prev, next) => {
   const pl = prev.friend.location;
   const nl = next.friend.location;
@@ -197,12 +216,12 @@ export default memo(FriendMarkerInner, (prev, next) => {
     prev.friend.displayName === next.friend.displayName &&
     prev.friend.username    === next.friend.username    &&
     prev.friend.avatarUrl   === next.friend.avatarUrl   &&
-    pl?.lat       === nl?.lat       &&
-    pl?.lng       === nl?.lng       &&
-    pl?.status    === nl?.status    &&
-    pl?.updatedAt === nl?.updatedAt &&
-    pl?.batteryLevel  === nl?.batteryLevel &&
-    pl?.isCharging    === nl?.isCharging
+    pl?.lat          === nl?.lat          &&
+    pl?.lng          === nl?.lng          &&
+    pl?.status       === nl?.status       &&
+    pl?.updatedAt    === nl?.updatedAt    &&
+    pl?.batteryLevel === nl?.batteryLevel &&
+    pl?.isCharging   === nl?.isCharging
   );
 });
 
@@ -309,9 +328,12 @@ const styles = StyleSheet.create({
   },
 
   lastSeen: {
-    color: COLORS.textMuted,
+    color: COLORS.warning,
     fontSize: 8,
     fontWeight: FONT.weights.medium,
+  },
+  lastSeenOffline: {
+    color: COLORS.textMuted,
   },
 
   // Pointer diamond

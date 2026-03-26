@@ -42,6 +42,14 @@ export function setDetectorUserId(userId: string): void {
   ctx.userId = userId;
 }
 
+export function resetDetector(): void {
+  ctx.state = 'moving';
+  ctx.candidateStart = null;
+  ctx.clusterCenter = null;
+  ctx.clusterPoints = [];
+  ctx.activeSession = null;
+}
+
 // ─── Main entry point ─────────────────────────────────────────────────────────
 
 export async function processNewPoint(point: LocationPoint): Promise<void> {

@@ -46,16 +46,18 @@ TaskManager.defineTask(TRACKING.BACKGROUND_TASK_NAME, async ({ data, error }: an
       // Step 2: Smooth only accepted points
       const { lat, lng } = smoothAccepted(raw.lat, raw.lng);
       const point = { ...raw, lat, lng };
-      try {
-        _lastRecordedLat = lat;
-        _lastRecordedLng = lng;
-        await insertLocationPoint(point);
-        await processNewPoint(point);
-        useLocationStore.getState().addPoint(point);
-        publishLocation(point.lat, point.lng, point.speed, point.heading);
-      } catch (dbErr: any) {
-        console.warn('[LocationService] Background DB write skipped:', dbErr?.message ?? dbErr);
-      }
+      _lastRecordedLat = lat;
+      _lastRecordedLng = lng;
+      // Update UI immediately — do not wait on DB writes
+      useLocationStore.getState().addPoint(point);
+      publishLocation(point.lat, point.lng, point.speed, point.heading);
+      // Fire-and-forget persistence
+      insertLocationPoint(point).catch((e: any) =>
+        console.warn('[LocationService] Background DB write skipped:', e?.message ?? e)
+      );
+      processNewPoint(point).catch((e: any) =>
+        console.warn('[LocationService] Background visit detection skipped:', e?.message ?? e)
+      );
     }
   } catch (e: any) {
     // Swallow EventEmitter forEach errors from expo-location's internal emitter
@@ -344,10 +346,16 @@ async function startForegroundTracking(): Promise<void> {
         const point = { ...raw, lat, lng };
         _lastRecordedLat = lat;
         _lastRecordedLng = lng;
-        await insertLocationPoint(point);
-        await processNewPoint(point);
+        // Update UI immediately — do not wait on DB writes
         useLocationStore.getState().addPoint(point);
         publishLocation(point.lat, point.lng, point.speed, point.heading);
+        // Fire-and-forget persistence
+        insertLocationPoint(point).catch((e: any) =>
+          console.warn('[LocationService] Foreground DB write skipped:', e?.message ?? e)
+        );
+        processNewPoint(point).catch((e: any) =>
+          console.warn('[LocationService] Foreground visit detection skipped:', e?.message ?? e)
+        );
       } catch (e: any) {
         if (!e?.message?.includes('forEach')) console.warn('[LocationService] Foreground fault:', e);
       }
@@ -406,18 +414,38 @@ export async function getCurrentLocation(): Promise<LocationPoint | null> {
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
+/**
+ * Compute speed in m/s from the distance between the last recorded position
+ * and the new position, divided by the elapsed time.
+ * More reliable than loc.coords.speed which is often null or inaccurate on Android.
+ */
+function computeSpeed(
+  newLat: number,
+  newLng: number,
+  newTimestamp: number,
+): number {
+  if (_lastRecordedLat === null || _lastRecordedLng === null || _lastAcceptedTime === null) {
+    return 0;
+  }
+  const dist = haversineMeters(_lastRecordedLat, _lastRecordedLng, newLat, newLng);
+  const dtSeconds = (newTimestamp - _lastAcceptedTime) / 1000;
+  if (dtSeconds <= 0 || dist <= 0) return 0;
+  return dist / dtSeconds;
+}
+
 function locationObjectToPoint(
   loc: Location.LocationObject,
   userId: string
 ): LocationPoint | null {
   if (!loc?.coords) return null;
+  const speed = computeSpeed(loc.coords.latitude, loc.coords.longitude, loc.timestamp);
   return {
     id: `${userId}_${loc.timestamp}`,
     userId,
     lat: loc.coords.latitude,
     lng: loc.coords.longitude,
     accuracy: loc.coords.accuracy ?? 0,
-    speed: Math.max(0, loc.coords.speed ?? 0),
+    speed,
     altitude: loc.coords.altitude ?? undefined,
     heading: loc.coords.heading ?? undefined,
     recordedAt: new Date(loc.timestamp).toISOString(),

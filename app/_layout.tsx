@@ -19,7 +19,7 @@ import { useLocationStore } from '@stores/locationStore';
 import { useLocation } from '@hooks/useLocation';
 import { COLORS } from '@constants/theme';
 import { registerForPushNotifications, setupNotificationTapHandler } from '@services/notificationService';
-import { getPointsForDate } from '@services/localDB';
+import { openUserDB, getPointsForDate } from '@services/localDB';
 import { todayDateString } from '@services/summaryService';
 
 const queryClient = new QueryClient({
@@ -27,6 +27,27 @@ const queryClient = new QueryClient({
     queries: { retry: 2, staleTime: 1000 * 60 * 5 },
   },
 });
+
+/**
+ * Opens the per-user SQLite database as soon as a session is established,
+ * and closes it on sign-out. Must render before HistoryHydrator.
+ */
+function DBManager() {
+  const { session } = useAuthStore();
+  const userId = session?.user?.id ?? null;
+
+  useEffect(() => {
+    if (userId) {
+      openUserDB(userId).catch((e) =>
+        console.warn('[DBManager] Failed to open user DB:', e)
+      );
+    }
+    // closeUserDB is handled in authStore.signOut so the in-memory state
+    // is cleared synchronously before the DB closes.
+  }, [userId]);
+
+  return null;
+}
 
 // Starts/stops GPS tracking whenever the auth session changes
 function LocationManager() {
@@ -48,13 +69,13 @@ function NotificationManager() {
 
 function HistoryHydrator() {
   const { session } = useAuthStore();
-  const { recentPoints, addPoint } = useLocationStore();
+  const { recentPoints, setPoints } = useLocationStore();
   const userId = session?.user?.id;
 
   useEffect(() => {
     if (!userId || recentPoints.length > 0) return;
     getPointsForDate(userId, todayDateString())
-      .then((pts) => pts.forEach((p) => addPoint(p)))
+      .then((pts) => { if (pts.length > 0) setPoints(pts); })
       .catch(() => {});
   }, [userId]);
 
@@ -149,6 +170,7 @@ export default function RootLayout() {
             <Stack.Screen name="replay" options={{ presentation: 'fullScreenModal', animation: 'slide_from_bottom' }} />
           </Stack>
           <AuthGate />
+          <DBManager />
           <LocationManager />
           <NotificationManager />
           <HistoryHydrator />

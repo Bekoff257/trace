@@ -1,4 +1,5 @@
 import { create } from 'zustand';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import {
   GoogleSignin,
   isSuccessResponse,
@@ -6,6 +7,9 @@ import {
   statusCodes,
 } from '@react-native-google-signin/google-signin';
 import { supabase } from '@services/supabaseClient';
+import { useLocationStore } from '@stores/locationStore';
+import { resetDetector } from '@services/visitDetector';
+import { closeUserDB } from '@services/localDB';
 import type { User } from '@/types/index';
 import type { Session } from '@supabase/supabase-js';
 
@@ -39,12 +43,21 @@ interface AuthState {
 }
 
 async function fetchUsername(userId: string): Promise<string | undefined> {
-  const { data } = await supabase
-    .from('user_profiles')
-    .select('username')
-    .eq('user_id', userId)
-    .maybeSingle();
-  return data?.username ?? undefined;
+  const cacheKey = `username_${userId}`;
+  try {
+    const { data } = await supabase
+      .from('user_profiles')
+      .select('username')
+      .eq('user_id', userId)
+      .maybeSingle();
+    const username: string | undefined = data?.username ?? undefined;
+    if (username) AsyncStorage.setItem(cacheKey, username).catch(() => {});
+    return username;
+  } catch {
+    // Network offline — fall back to cached value so we don't redirect to username setup
+    const cached = await AsyncStorage.getItem(cacheKey).catch(() => null);
+    return cached ?? undefined;
+  }
 }
 
 // Map Supabase auth user to our User type
@@ -192,6 +205,10 @@ export const useAuthStore = create<AuthState>((set) => ({
   signOut: async () => {
     // Clear local state immediately so the UI responds regardless of network
     set({ session: null, user: null, error: null, isLoading: false });
+    // Clear location data and close the user's DB so a new account starts fresh
+    useLocationStore.getState().clearPoints();
+    resetDetector();
+    closeUserDB().catch(() => {});
     supabase.auth.signOut().catch(() => {}); // best-effort server-side revoke
   },
 

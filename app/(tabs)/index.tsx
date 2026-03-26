@@ -1,4 +1,4 @@
-import { useRef, useEffect, useState } from 'react';
+import { useRef, useEffect, useState, useMemo } from 'react';
 import {
   View,
   Text,
@@ -26,6 +26,7 @@ import { useDailySummary } from '@hooks/useDailySummary';
 import { useTimeline } from '@hooks/useTimeline';
 import { useRealtimeFriends } from '@hooks/useRealtimeFriends';
 import { usePremiumGate } from '@hooks/usePremiumGate';
+import { useBackgroundSnapper } from '@hooks/useBackgroundSnapper';
 import { initPublisher, stopPublisher } from '@services/friendLocationPublisher';
 import { COLORS, FONT, SPACING, RADIUS, GRADIENTS, SHADOWS } from '@constants/theme';
 import SectionLabel from '@components/ui/SectionLabel';
@@ -33,7 +34,6 @@ import LiveIndicator from '@components/ui/LiveIndicator';
 import ProgressBar from '@components/ui/ProgressBar';
 import RouteLayer from '@components/map/RouteLayer';
 import FootstepsLayer from '@components/map/FootstepsLayer';
-import { snapToRoads, type LatLng } from '@services/roadSnapper';
 import VisitMarker from '@components/map/VisitMarker';
 import FriendMarker from '@components/map/FriendMarker';
 
@@ -53,9 +53,9 @@ function formatDuration(minutes: number): string {
 
 export default function HomeScreen() {
   const { user } = useAuthStore();
-  const { isTracking, currentSession, recentPoints, lastPoint, trailStyle, setTrailStyle } = useLocationStore();
+  const { isTracking, isBackground, currentSession, pathSegments, lastPoint, trailStyle, setTrailStyle } = useLocationStore();
   const { friends } = useFriendsStore();
-  const { summary, distanceMi, progressToGoal } = useDailySummary();
+  const { distanceMi, stepsEstimated, timeOutsideMin, placesVisited: placesCount, progressToGoal } = useDailySummary();
   const { sessions } = useTimeline();
   const { show: showAlert, element: alertElement } = useAlert();
   const { gate, showPaywall, paywallElement } = usePremiumGate();
@@ -96,47 +96,18 @@ export default function HomeScreen() {
   const firstName = user?.displayName?.split(' ')[0] ?? 'Explorer';
   const progressPct = Math.round(progressToGoal * 100);
   const currentPlace = currentSession?.placeName ?? null;
-  const timeOutside = summary ? formatDuration(summary.timeOutsideMin) : '—';
-  const placesVisited = summary?.placesVisited ?? sessions.length;
+  const timeOutside = timeOutsideMin > 0 ? formatDuration(timeOutsideMin) : '0m';
+  const placesVisited = placesCount > 0 ? placesCount : sessions.length;
 
-  // Filter consecutive points < 8m apart to remove GPS jitter from the visual route
-  const routeCoords = recentPoints.reduce<LatLng[]>((acc, p) => {
-    if (acc.length === 0) { acc.push({ latitude: p.lat, longitude: p.lng }); return acc; }
-    const prev = acc[acc.length - 1];
-    const dLat = (p.lat - prev.latitude) * Math.PI / 180;
-    const dLng = (p.lng - prev.longitude) * Math.PI / 180;
-    const a = Math.sin(dLat / 2) ** 2 + Math.cos(prev.latitude * Math.PI / 180) * Math.cos(p.lat * Math.PI / 180) * Math.sin(dLng / 2) ** 2;
-    const dist = 6371000 * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
-    if (dist >= 8) acc.push({ latitude: p.lat, longitude: p.lng });
-    return acc;
-  }, []);
+  // Road-snapped display segments (background, non-blocking).
+  // Raw GPS is used instantly; snapping replaces the historical portion after 8 s.
+  const displaySegments = useBackgroundSnapper(pathSegments);
 
-  // Road-snapped version of the route (updated 3 s after the last new GPS point)
-  const [snappedCoords, setSnappedCoords] = useState<LatLng[]>([]);
-  const [snapSucceeded, setSnapSucceeded] = useState(false);
-  const routeCoordsRef = useRef(routeCoords);
-  routeCoordsRef.current = routeCoords;
-  const snapTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // Flat coords for FootstepsLayer (use display segments so icons follow roads too)
+  const footstepsCoords = useMemo(() => displaySegments.flat(), [displaySegments]);
 
-  useEffect(() => {
-    if (snapTimerRef.current) clearTimeout(snapTimerRef.current);
-    if (routeCoords.length < 2) { setSnappedCoords([]); setSnapSucceeded(false); return; }
-    snapTimerRef.current = setTimeout(() => {
-      snapToRoads(routeCoordsRef.current).then(({ coords, snapped }) => {
-        setSnappedCoords(coords);
-        setSnapSucceeded(snapped);
-      });
-    }, 3000);
-    return () => { if (snapTimerRef.current) clearTimeout(snapTimerRef.current); };
-  }, [recentPoints.length]);
-
-  // When offline/snapping failed: always show live raw GPS (no stale freeze)
-  // When snapping succeeded: show road-snapped path
-  const displayCoords = snapSucceeded && snappedCoords.length >= 2 ? snappedCoords : routeCoords;
-
-  // Auto-fall back to line mode when driving (> 10 km/h = 2.78 m/s).
-  // Preserves the user's saved trailStyle preference for when they slow down.
-  const effectiveTrailStyle = (lastPoint?.speed ?? 0) > 2.78 ? 'lines' : trailStyle;
+  // Auto-fall back to line mode when clearly driving (> 30 km/h = 8.33 m/s).
+  const effectiveTrailStyle = (lastPoint?.speed ?? 0) > 8.33 ? 'lines' : trailStyle;
 
   const fadeAnim = useRef(new Animated.Value(0)).current;
   const slideAnim = useRef(new Animated.Value(24)).current;
@@ -177,8 +148,8 @@ export default function HomeScreen() {
             <View style={styles.header}>
               <View style={styles.headerLeft}>
                 <SectionLabel
-                  text={isTracking ? '● LIVE TRACKING' : 'TRACKING OFF'}
-                  color={isTracking ? COLORS.success : COLORS.textMuted}
+                  text={isTracking ? (isBackground ? '● TRACKING IN BACKGROUND' : '● LIVE TRACKING') : 'TRACKING OFF'}
+                  color={isTracking ? (isBackground ? COLORS.warning : COLORS.success) : COLORS.textMuted}
                 />
                 <Text style={styles.greeting}>
                   {t(getGreetingKey())},{'\n'}
@@ -237,9 +208,9 @@ export default function HomeScreen() {
                 />
                 {isTracking && <UserLocation />}
                 {effectiveTrailStyle === 'lines'
-  ? <RouteLayer allCoords={displayCoords} visibleCoords={displayCoords} />
-  : <FootstepsLayer coords={routeCoords} previewLimit={footstepsPreviewLimit} onLockPress={showPaywall} />
-}
+                  ? <RouteLayer segments={displaySegments} />
+                  : <FootstepsLayer coords={footstepsCoords} previewLimit={footstepsPreviewLimit} onLockPress={showPaywall} />
+                }
                 {is3D && (
                   <Layer
                     id="3d-buildings"
@@ -279,10 +250,14 @@ export default function HomeScreen() {
                 <BlurView intensity={60} tint="dark" style={StyleSheet.absoluteFill} />
                 <View style={styles.mapLiveBorder} />
                 {isTracking ? (
-                  <LiveIndicator
-                    label={currentPlace ? currentPlace.toUpperCase() : t('home.live')}
-                    color={COLORS.success}
-                  />
+                  isBackground ? (
+                    <LiveIndicator label="UPDATING IN BG" color={COLORS.warning} />
+                  ) : (
+                    <LiveIndicator
+                      label={currentPlace ? currentPlace.toUpperCase() : t('home.live')}
+                      color={COLORS.success}
+                    />
+                  )
                 ) : (
                   <LiveIndicator label={t('home.tapToStart')} color={COLORS.textMuted} />
                 )}
@@ -372,13 +347,13 @@ export default function HomeScreen() {
               <StatTile
                 icon="trending-up-outline"
                 label={t('home.stepsEst')}
-                value={summary?.stepsEstimated ? `${(summary.stepsEstimated / 1000).toFixed(1)}k` : '—'}
+                value={stepsEstimated > 0 ? `${(stepsEstimated / 1000).toFixed(1)}k` : '—'}
                 color={COLORS.success}
               />
               <StatTile
                 icon="flame-outline"
                 label={t('home.activeMin')}
-                value={summary ? String(Math.round(summary.timeOutsideMin * 0.6)) : '—'}
+                value={timeOutsideMin > 0 ? String(Math.round(timeOutsideMin * 0.6)) : '—'}
                 color={COLORS.warning}
               />
             </View>
@@ -443,9 +418,9 @@ export default function HomeScreen() {
             />
             {isTracking && <UserLocation />}
             {effectiveTrailStyle === 'lines'
-  ? <RouteLayer allCoords={displayCoords} visibleCoords={displayCoords} />
-  : <FootstepsLayer coords={routeCoords} previewLimit={footstepsPreviewLimit} onLockPress={showPaywall} />
-}
+              ? <RouteLayer segments={displaySegments} />
+              : <FootstepsLayer coords={footstepsCoords} previewLimit={footstepsPreviewLimit} onLockPress={showPaywall} />
+            }
             {is3D && (
               <Layer
                 id="fs-3d-buildings"

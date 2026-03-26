@@ -16,7 +16,7 @@ import { startAutoSync, stopAutoSync, runSync } from '@services/syncService';
 
 export function useLocation(): void {
   const { session, user } = useAuthStore();
-  const { setTracking } = useLocationStore();
+  const { setTracking, setBackground } = useLocationStore();
   const appState = useRef<AppStateStatus>(AppState.currentState);
 
   useEffect(() => {
@@ -24,6 +24,7 @@ export function useLocation(): void {
       stopTracking();
       stopAutoSync();
       setTracking(false);
+      setBackground(false);
       return;
     }
 
@@ -42,8 +43,12 @@ export function useLocation(): void {
       const prev = appState.current;
       appState.current = next;
 
-      // App came to foreground — run a sync and refresh state
-      if (prev.match(/inactive|background/) && next === 'active') {
+      const goingBackground = next === 'background';
+      const comingForeground = prev.match(/inactive|background/) && next === 'active';
+
+      setBackground(goingBackground);
+
+      if (comingForeground) {
         runSync(userId).catch(console.error);
       }
     });

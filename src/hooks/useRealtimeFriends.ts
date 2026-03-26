@@ -1,9 +1,12 @@
 /**
  * useRealtimeFriends — subscribes to Supabase Realtime for:
- *   - friends' live locations
+ *   - friends' live locations  (instant, no polling)
  *   - profile changes
  *   - incoming friend requests  (friendships INSERT where friend_id = me)
  *   - accepted outgoing requests (friendships UPDATE where user_id  = me)
+ *
+ * A 60-second safety-net refresh runs in parallel to recover from any
+ * missed realtime events (e.g. brief network drop, subscription restart).
  */
 import { useEffect, useRef } from 'react';
 import type { RealtimeChannel } from '@supabase/supabase-js';
@@ -12,6 +15,8 @@ import { useFriendsStore } from '@stores/friendsStore';
 import { speedToStatus } from '@services/friendLocationPublisher';
 import { showLocalNotification } from '@services/notificationService';
 import type { FriendLocation, FriendProfile } from '@/types/index';
+
+const SAFETY_REFETCH_MS = 60_000; // fallback full-fetch interval
 
 export function useRealtimeFriends(userId: string | undefined) {
   const { fetchFriends, fetchPendingRequests, upsertLocation, upsertProfile } = useFriendsStore();
@@ -119,13 +124,25 @@ export function useRealtimeFriends(userId: string | undefined) {
         }
       )
 
-      .subscribe();
+      .subscribe((status) => {
+        // If the channel drops, re-fetch to ensure no missed events
+        if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT') {
+          fetchFriends(userId);
+        }
+      });
 
     channelRef.current = channel;
+
+    // Safety-net: re-fetch full friend list every 60 s to catch any missed
+    // realtime events (network blip, subscription restart, etc.)
+    const safetyTimer = setInterval(() => {
+      fetchFriends(userId);
+    }, SAFETY_REFETCH_MS);
 
     return () => {
       channel.unsubscribe();
       channelRef.current = null;
+      clearInterval(safetyTimer);
     };
   }, [userId]);
 }

@@ -1,6 +1,12 @@
 /**
- * RouteLayer — renders the GPS route as MapLibre layers.
- * Ghost full route (dim) + visible animated slice (bright) + head dot.
+ * RouteLayer — renders the GPS route as one GeoJSON source per continuous
+ * path segment. Segments are split wherever there is a > 30 s GPS gap so the
+ * map never draws a straight line across a gap in coverage.
+ *
+ * Each source gets a stable key derived from its segment index, so React
+ * updates the `data` prop in-place on every GPS point rather than remounting.
+ * A `_${seg.length}` suffix on the source ID forces MapLibre to treat updated
+ * data as a fresh geometry, guaranteeing real-time re-render.
  */
 import { GeoJSONSource, Layer } from '@maplibre/maplibre-react-native';
 import { COLORS } from '@constants/theme';
@@ -11,8 +17,8 @@ interface Coord {
 }
 
 interface RouteLayerProps {
-  allCoords: Coord[];
-  visibleCoords: Coord[];
+  /** Path broken into continuous segments. Each segment is rendered separately. */
+  segments: Coord[][];
 }
 
 function toLine(coords: Coord[]): GeoJSON.Feature<GeoJSON.LineString> {
@@ -37,33 +43,25 @@ function toPoint(coord: Coord): GeoJSON.Feature<GeoJSON.Point> {
   };
 }
 
-export default function RouteLayer({ allCoords, visibleCoords }: RouteLayerProps) {
-  const head = visibleCoords.length > 0 ? visibleCoords[visibleCoords.length - 1] : null;
+export default function RouteLayer({ segments }: RouteLayerProps) {
+  const validSegments = segments.filter((s) => s.length > 1);
+
+  // Head dot: last point of last valid segment
+  const lastSeg = validSegments[validSegments.length - 1];
+  const head = lastSeg ? lastSeg[lastSeg.length - 1] : null;
 
   return (
     <>
-      {allCoords.length > 1 && (
-        <GeoJSONSource id="ghost-route" data={toLine(allCoords)}>
+      {validSegments.map((seg, i) => (
+        // Key includes length so MapLibre re-evaluates the source on every update
+        <GeoJSONSource
+          key={`seg-${i}`}
+          id={`route-seg-${i}-${seg.length}`}
+          data={toLine(seg)}
+        >
+          {/* Soft glow */}
           <Layer
-            id="ghost-line"
-            type="line"
-            paint={{
-              'line-color': 'rgba(91,127,255,0.18)',
-              'line-width': 3,
-            }}
-            layout={{
-              'line-cap': 'round',
-              'line-join': 'round',
-            }}
-          />
-        </GeoJSONSource>
-      )}
-
-      {visibleCoords.length > 1 && (
-        <GeoJSONSource id="visible-route" data={toLine(visibleCoords)}>
-          {/* Wide soft glow behind the line */}
-          <Layer
-            id="visible-glow"
+            id={`seg-glow-${i}`}
             type="line"
             paint={{
               'line-color': COLORS.accent,
@@ -71,46 +69,32 @@ export default function RouteLayer({ allCoords, visibleCoords }: RouteLayerProps
               'line-opacity': 0.18,
               'line-blur': 6,
             }}
-            layout={{
-              'line-cap': 'round',
-              'line-join': 'round',
-            }}
+            layout={{ 'line-cap': 'round', 'line-join': 'round' }}
           />
-          {/* Bright core line */}
+          {/* Bright core */}
           <Layer
-            id="visible-line"
+            id={`seg-line-${i}`}
             type="line"
             paint={{
               'line-color': COLORS.accent,
               'line-width': 3.5,
             }}
-            layout={{
-              'line-cap': 'round',
-              'line-join': 'round',
-            }}
+            layout={{ 'line-cap': 'round', 'line-join': 'round' }}
           />
         </GeoJSONSource>
-      )}
+      ))}
 
       {head && (
         <GeoJSONSource id="head-dot" data={toPoint(head)}>
           <Layer
             id="head-outer"
             type="circle"
-            paint={{
-              'circle-radius': 14,
-              'circle-color': COLORS.accent,
-              'circle-opacity': 0.2,
-            }}
+            paint={{ 'circle-radius': 14, 'circle-color': COLORS.accent, 'circle-opacity': 0.2 }}
           />
           <Layer
             id="head-mid"
             type="circle"
-            paint={{
-              'circle-radius': 8,
-              'circle-color': COLORS.accent,
-              'circle-opacity': 0.5,
-            }}
+            paint={{ 'circle-radius': 8, 'circle-color': COLORS.accent, 'circle-opacity': 0.5 }}
           />
           <Layer
             id="head-inner"

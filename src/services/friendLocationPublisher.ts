@@ -2,14 +2,17 @@
  * Friend Location Publisher
  * Upserts the current user's location + battery to friend_locations in Supabase.
  *
- * Throttle strategy (battery + bandwidth optimisation):
- *   - Minimum 15 s between any two publishes.
- *   - Skip if moved < 20 m since last publish AND < 30 s have passed.
- *   - Always publish after 30 s even if stationary (keeps "last seen" fresh).
+ * Throttle strategy:
+ *   - Minimum 5 s between any two publishes.
+ *   - Skip if moved < 20 m since last publish AND < 10 s have passed.
+ *   - Always publish after 10 s even if stationary (keeps "last seen" fresh).
+ *   - When app returns to foreground, reset throttle so next GPS fix publishes
+ *     immediately (prevents stale location after background period).
  *
- * Result: ~2–4 publishes/min walking vs the previous 24/min (every 2.5 s).
+ * Result: ~6–12 publishes/min while moving; 1 publish/10 s while stationary.
  */
 import * as Battery from 'expo-battery';
+import { AppState, type AppStateStatus } from 'react-native';
 import { supabase } from './supabaseClient';
 import type { MovementStatus } from '@/types/index';
 
@@ -28,8 +31,10 @@ let _lastPublishLat: number | null = null;
 let _lastPublishLng: number | null = null;
 let _lastPublishTime = 0;
 
-const PUBLISH_MIN_MS   = 15_000;  // never publish more often than this
-const PUBLISH_MAX_MS   = 30_000;  // always publish after this interval (refresh last-seen)
+let _appStateSubscription: ReturnType<typeof AppState.addEventListener> | null = null;
+
+const PUBLISH_MIN_MS   = 5_000;   // never publish more often than this
+const PUBLISH_MAX_MS   = 10_000;  // always publish after this interval (refresh last-seen)
 const PUBLISH_MIN_DIST = 20;      // metres — skip publish if moved less than this
 
 // ─── Speed → status ───────────────────────────────────────────────────────────
@@ -82,6 +87,15 @@ export async function initPublisher(userId: string, username?: string): Promise<
       batteryState === Battery.BatteryState.FULL;
   });
 
+  // Reset throttle when app comes to foreground so the very next GPS fix
+  // publishes immediately instead of waiting for PUBLISH_MIN_MS to expire.
+  _appStateSubscription?.remove();
+  _appStateSubscription = AppState.addEventListener('change', (state: AppStateStatus) => {
+    if (state === 'active') {
+      _lastPublishTime = 0;
+    }
+  });
+
   await upsertProfile(userId);
 }
 
@@ -93,8 +107,10 @@ export function stopPublisher(): void {
   _lastPublishTime  = 0;
   _batterySubscription?.remove();
   _chargingSubscription?.remove();
+  _appStateSubscription?.remove();
   _batterySubscription  = null;
   _chargingSubscription = null;
+  _appStateSubscription = null;
 }
 
 // ─── Publish ──────────────────────────────────────────────────────────────────
