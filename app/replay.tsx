@@ -40,6 +40,7 @@ import { useRouteReplay, type PlaybackSpeed, type ReplayLatLng } from '@hooks/us
 import VisitMarker from '@components/map/VisitMarker';
 import PaywallScreen from '@components/ui/PaywallScreen';
 import { usePlanStore } from '@stores/planStore';
+import { useLocationStore } from '@stores/locationStore';
 import { MAP_STYLE } from '@constants/mapStyle';
 import { COLORS, FONT, SPACING, RADIUS, SHADOWS } from '@constants/theme';
 
@@ -118,6 +119,7 @@ export default function ReplayScreen() {
   const [dateOffset, setDateOffset] = useState(0);
   const [is3D, setIs3D] = useState(false);
   const { userPlan } = usePlanStore();
+  const lastKnownPoint = useLocationStore((s) => s.recentPoints[s.recentPoints.length - 1] ?? null);
   const [previewEnded, setPreviewEnded]     = useState(false);
   const [paywallVisible, setPaywallVisible] = useState(false);
   const [recordingStep, setRecordingStep]   = useState<RecordingStep>('idle');
@@ -188,7 +190,13 @@ export default function ReplayScreen() {
   );
 
   const overviewCenter = useMemo<[number, number]>(() => {
-    if (allCoordsFlat.length === 0) return [0, 0];
+    if (allCoordsFlat.length === 0) {
+      // Fall back to last known GPS position so the map shows the user's area,
+      // not the default [0, 0] which is in the Gulf of Guinea off Africa.
+      return lastKnownPoint
+        ? [lastKnownPoint.lng, lastKnownPoint.lat]
+        : [0, 0];
+    }
     const lats = allCoordsFlat.map((c) => c.latitude);
     const lngs = allCoordsFlat.map((c) => c.longitude);
     return [

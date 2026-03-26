@@ -34,12 +34,37 @@ async function sendPush(messages: ExpoPushMessage[]): Promise<void> {
 }
 
 async function getDisplayName(userId: string): Promise<string> {
-  const { data } = await supabase
+  // Check user_profiles first (new users), fall back to users (legacy)
+  const { data: profile } = await supabase
+    .from('user_profiles')
+    .select('display_name')
+    .eq('user_id', userId)
+    .maybeSingle();
+  if (profile?.display_name) return profile.display_name;
+
+  const { data: user } = await supabase
     .from('users')
     .select('display_name')
     .eq('id', userId)
-    .single();
-  return data?.display_name ?? 'Someone';
+    .maybeSingle();
+  return user?.display_name ?? 'Someone';
+}
+
+async function getPushToken(userId: string): Promise<string | null> {
+  // user_profiles is more up-to-date for new users
+  const { data: profile } = await supabase
+    .from('user_profiles')
+    .select('push_token')
+    .eq('user_id', userId)
+    .maybeSingle();
+  if (profile?.push_token) return profile.push_token;
+
+  const { data: user } = await supabase
+    .from('users')
+    .select('push_token')
+    .eq('id', userId)
+    .maybeSingle();
+  return user?.push_token ?? null;
 }
 
 async function getFriendTokens(userId: string): Promise<string[]> {
@@ -55,14 +80,34 @@ async function getFriendTokens(userId: string): Promise<string[]> {
     f.user_id === userId ? f.friend_id : f.user_id
   );
 
-  const { data: profiles } = await supabase
-    .from('users')
-    .select('push_token')
-    .in('id', friendIds)
-    .not('push_token', 'is', null);
+  // Collect tokens from both tables; user_profiles wins (more up-to-date)
+  const [profilesRes, usersRes] = await Promise.all([
+    supabase
+      .from('user_profiles')
+      .select('user_id, push_token')
+      .in('user_id', friendIds)
+      .not('push_token', 'is', null),
+    supabase
+      .from('users')
+      .select('id, push_token')
+      .in('id', friendIds)
+      .not('push_token', 'is', null),
+  ]);
 
-  return (profiles ?? []).map((p) => p.push_token).filter(Boolean);
+  const tokenMap = new Map<string, string>();
+  for (const u of (usersRes.data ?? [])) {
+    if (u.push_token) tokenMap.set(u.id, u.push_token);
+  }
+  for (const p of (profilesRes.data ?? [])) {
+    if (p.push_token) tokenMap.set(p.user_id, p.push_token);
+  }
+
+  return [...tokenMap.values()];
 }
+
+
+
+
 
 // ─── Handlers ────────────────────────────────────────────────────────────────
 
@@ -101,17 +146,12 @@ async function handleFriendship(
 
   if (status === 'pending') {
     // New friend request — notify the recipient
-    const { data: recipient } = await supabase
-      .from('users')
-      .select('push_token')
-      .eq('id', friend_id)
-      .single();
-
-    if (!recipient?.push_token) return;
+    const token = await getPushToken(friend_id);
+    if (!token) return;
 
     const senderName = await getDisplayName(user_id);
     await sendPush([{
-      to: recipient.push_token,
+      to: token,
       title: 'New friend request',
       body: `${senderName} wants to share their location with you`,
       data: { type: 'friend_request', fromUserId: user_id },
@@ -119,17 +159,12 @@ async function handleFriendship(
     }]);
   } else if (status === 'accepted' && oldRecord?.status === 'pending') {
     // Request accepted — notify the original requester
-    const { data: requester } = await supabase
-      .from('users')
-      .select('push_token')
-      .eq('id', user_id)
-      .single();
-
-    if (!requester?.push_token) return;
+    const token = await getPushToken(user_id);
+    if (!token) return;
 
     const acceptorName = await getDisplayName(friend_id);
     await sendPush([{
-      to: requester.push_token,
+      to: token,
       title: 'Friend request accepted',
       body: `${acceptorName} accepted your request — you can now see each other on the map`,
       data: { type: 'friend_accepted', fromUserId: friend_id },
