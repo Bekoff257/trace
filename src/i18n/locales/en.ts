@@ -258,4 +258,27 @@ export default {
     checking: 'Checking...',
     skip: 'Skip for now',
   },
+
+  // ── Paywall ────────────────────────────────────────────────────────────────
+  paywall: {
+    title: 'Pick your plan',
+    feature1: 'Unlimited historical replays',
+    feature2: 'Advanced habit analytics',
+    feature3: 'Custom life timelines',
+    feature4: 'Priority cloud sync & export',
+    feature5: 'Full location history access',
+    planYearly: 'Yearly',
+    planMonthly: 'Monthly',
+    planYearlySub: 'Only {{price}}/mo',
+    bestValue: 'Best Value',
+    continueBtn: 'Continue',
+    restorePurchases: 'Restore Purchases',
+    terms: 'Terms',
+    privacy: 'Privacy',
+    storeUnavailableTitle: 'Store Unavailable',
+    storeUnavailableMsg: 'Could not connect to the store. Please try again.',
+    purchaseFailedTitle: 'Purchase Failed',
+    noPurchasesTitle: 'No Purchases Found',
+    noPurchasesMsg: "We couldn't find any previous purchases linked to your account.",
+  },
 } as const;

@@ -10,6 +10,8 @@ import {
   startTracking,
   stopTracking,
   setTrackingUserId,
+  restartForegroundTracking,
+  rehydrateFromDB,
 } from '@services/locationService';
 import { setDetectorUserId } from '@services/visitDetector';
 import { startAutoSync, stopAutoSync, runSync } from '@services/syncService';
@@ -57,6 +59,15 @@ export function useLocation(): void {
       setBackground(goingBackground);
 
       if (comingForeground) {
+        // 1. Re-hydrate the location store from SQLite so any points recorded
+        //    by the background task while the app was backgrounded / killed
+        //    are immediately reflected in path drawing and distance stats.
+        rehydrateFromDB(userId).catch(console.error);
+        // 2. Restart foreground subscription — Android Doze / OS memory pressure
+        //    can silently kill watchPositionAsync while _locationSubscription stays
+        //    non-null, causing path drawing and stats to freeze.
+        restartForegroundTracking(userId).catch(console.error);
+        // 3. Push any unsynced SQLite points to the server.
         runSync(userId).catch(console.error);
       }
     });

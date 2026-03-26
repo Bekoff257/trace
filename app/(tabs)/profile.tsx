@@ -15,7 +15,7 @@ import { supabase } from '@services/supabaseClient';
 import { COLORS, FONT, SPACING, RADIUS, GRADIENTS } from '@constants/theme';
 import SectionLabel from '@components/ui/SectionLabel';
 import { exportVisitSessionsCSV } from '@services/exportService';
-import { startTracking, stopTracking, restartTracking } from '@services/locationService';
+import { startTracking, stopTracking, restartTracking, startMockTracking, stopMockTracking, isMockTracking } from '@services/locationService';
 
 interface MenuRowProps {
   icon: keyof typeof Ionicons.glyphMap;
@@ -77,6 +77,7 @@ export default function ProfileScreen() {
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [optimisticTracking, setOptimisticTracking] = useState(isTracking);
   const [currentLang, setCurrentLang] = useState<Language>(getCurrentLanguage());
+  const [mockActive, setMockActive] = useState(isMockTracking());
   const batterySaver = mode === 'low_power';
 
   async function handleTrackingToggle(enabled: boolean) {
@@ -367,6 +368,34 @@ export default function ProfileScreen() {
             <View style={styles.divider} />
             <MenuRow icon="log-out-outline" iconColor={COLORS.error} label={t('profile.signOut')} danger onPress={signOut} />
           </View>
+
+          {/* ── Dev Tools (only in __DEV__ builds) ── */}
+          {__DEV__ && (
+            <>
+              <Text style={styles.groupTitle}>DEV TOOLS</Text>
+              <View style={styles.menuCard}>
+                <BlurView intensity={15} tint="dark" style={StyleSheet.absoluteFill} />
+                <View style={styles.menuBorder} />
+                <MenuRow
+                  icon="walk"
+                  iconColor="#FF9500"
+                  label="Mock GPS Walking"
+                  value={mockActive ? 'ON' : 'OFF'}
+                  isToggle
+                  toggleValue={mockActive}
+                  onToggle={(enabled) => {
+                    if (enabled && user?.id) {
+                      startMockTracking(user.id);
+                      setMockActive(true);
+                    } else {
+                      stopMockTracking();
+                      setMockActive(false);
+                    }
+                  }}
+                />
+              </View>
+            </>
+          )}
 
           <Text style={styles.version}>{t('common.version')}</Text>
         </ScrollView>

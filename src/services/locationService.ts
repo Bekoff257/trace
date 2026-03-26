@@ -7,17 +7,89 @@ import * as Location from 'expo-location';
 import * as TaskManager from 'expo-task-manager';
 import { Platform } from 'react-native';
 import Constants, { ExecutionEnvironment } from 'expo-constants';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import 'react-native-get-random-values';
 
 // Background location on Android is not supported in Expo Go.
 const isExpoGo = Constants.executionEnvironment === ExecutionEnvironment.StoreClient;
 const supportsBackground = !(Platform.OS === 'android' && isExpoGo);
 import { TRACKING } from '@constants/config';
-import { insertLocationPoint } from './localDB';
+import { insertLocationPoint, getPointsForDate } from './localDB';
 import { processNewPoint } from './visitDetector';
 import { publishLocation } from './friendLocationPublisher';
 import { useLocationStore } from '@stores/locationStore';
 import type { LocationPoint } from '@/types/index';
+
+// ─── Persistence keys (survive app kill) ─────────────────────────────────────
+
+const LS_USER_ID  = 'ls_uid';
+const LS_LAST_POS = 'ls_last_pos';
+
+function todayStr(): string {
+  const d = new Date();
+  return [
+    d.getFullYear(),
+    String(d.getMonth() + 1).padStart(2, '0'),
+    String(d.getDate()).padStart(2, '0'),
+  ].join('-');
+}
+
+/**
+ * Persist filter state after every accepted point.
+ * The background task loads this on startup after an app kill so the GPS
+ * filter has a valid reference position instead of treating the first
+ * post-kill point as a fresh baseline.
+ */
+function persistFilterState(lat: number, lng: number, time: number): void {
+  AsyncStorage.setItem(LS_LAST_POS, JSON.stringify({ lat, lng, time })).catch(() => {});
+}
+
+/**
+ * Load userId + filter state from AsyncStorage.
+ * Must be awaited at the start of the background task handler — after an app
+ * kill all module-level variables are reset to their default values.
+ */
+async function loadPersistedState(): Promise<void> {
+  if (_currentUserId === 'anonymous') {
+    const uid = await AsyncStorage.getItem(LS_USER_ID).catch(() => null);
+    if (uid) _currentUserId = uid;
+  }
+  if (_lastRecordedLat === null) {
+    try {
+      const raw = await AsyncStorage.getItem(LS_LAST_POS);
+      if (raw) {
+        const { lat, lng, time } = JSON.parse(raw) as {
+          lat: number; lng: number; time: number;
+        };
+        _lastRecordedLat  = lat;
+        _lastRecordedLng  = lng;
+        _lastAcceptedTime = time;
+      }
+    } catch {}
+  }
+}
+
+/**
+ * Re-read today's points from SQLite and push them into the location store.
+ * Call this every time the app returns to the foreground so the path and
+ * distance reflect any points recorded by the background task while backgrounded.
+ */
+export async function rehydrateFromDB(userId: string): Promise<void> {
+  try {
+    const points = await getPointsForDate(userId, todayStr());
+    if (points.length > 0) {
+      useLocationStore.getState().setPoints(points);
+      // Seed filter state from the last DB point so foreground tracking
+      // continues smoothly from where the background task left off.
+      const last = points[points.length - 1];
+      if (_lastRecordedLat === null) {
+        _lastRecordedLat  = last.lat;
+        _lastRecordedLng  = last.lng;
+        _lastAcceptedTime = new Date(last.recordedAt).getTime();
+      }
+    }
+  } catch {}
+}
 
 // ─── Background Task ──────────────────────────────────────────────────────────
 // Must be defined at module level — NOT inside a function or component.
@@ -31,6 +103,10 @@ TaskManager.defineTask(TRACKING.BACKGROUND_TASK_NAME, async ({ data, error }: an
 
     const { locations } = data as { locations: Location.LocationObject[] };
     if (!locations?.length) return;
+
+    // Restore userId + filter state that were wiped by an app kill.
+    // This is a no-op when the app is merely backgrounded (state still in memory).
+    await loadPersistedState();
 
     for (const loc of locations) {
       const raw = locationObjectToPoint(loc, _currentUserId);
@@ -48,7 +124,13 @@ TaskManager.defineTask(TRACKING.BACKGROUND_TASK_NAME, async ({ data, error }: an
       const point = { ...raw, lat, lng };
       _lastRecordedLat = lat;
       _lastRecordedLng = lng;
-      // Update UI immediately — do not wait on DB writes
+
+      // Persist filter state so the next background task invocation (or a
+      // foreground restart) has a valid reference position.
+      persistFilterState(lat, lng, loc.timestamp);
+
+      // Update UI if the app is in the foreground (addPoint is a no-op in a
+      // separate killed-app JS context but harmless to call).
       useLocationStore.getState().addPoint(point);
       publishLocation(point.lat, point.lng, point.speed, point.heading);
       // Fire-and-forget persistence
@@ -231,6 +313,7 @@ function resetFilterState(): void {
 
 export function setTrackingUserId(userId: string): void {
   _currentUserId = userId;
+  AsyncStorage.setItem(LS_USER_ID, userId).catch(() => {});
 }
 
 // Unregister the background task if the environment doesn't support it.
@@ -304,9 +387,55 @@ export async function restartTracking(userId: string): Promise<void> {
   await startTracking(userId);
 }
 
+/**
+ * Restart only the foreground subscription — leaves the background task running.
+ * Call this whenever the app returns to the foreground to recover from a dead
+ * subscription (Android Doze / OS memory pressure can kill watchPositionAsync
+ * silently while _locationSubscription remains non-null).
+ */
+export async function restartForegroundTracking(userId: string): Promise<void> {
+  _currentUserId = userId;
+  await stopForegroundTracking();   // nulls _locationSubscription + resets filter
+  await startForegroundTracking();
+}
+
 export async function isTrackingActive(): Promise<boolean> {
   const hasTask = await TaskManager.isTaskRegisteredAsync(TRACKING.BACKGROUND_TASK_NAME);
   return hasTask || _locationSubscription !== null;
+}
+
+// ─── Shared point pipeline ────────────────────────────────────────────────────
+
+/**
+ * Runs a raw LocationObject through the full filter → smooth → persist pipeline.
+ * Used by both the real foreground subscription and the dev mock emitter.
+ */
+async function processRawPoint(loc: Location.LocationObject): Promise<void> {
+  try {
+    const raw = locationObjectToPoint(loc, _currentUserId);
+    if (!raw) return;
+
+    const result = evaluatePoint(raw.lat, raw.lng, raw.accuracy, loc.timestamp);
+    if (result === 'reject') return;
+    _lastAcceptedTime = loc.timestamp;
+    if (result === 'lock') return;
+
+    const { lat, lng } = smoothAccepted(raw.lat, raw.lng);
+    const point = { ...raw, lat, lng };
+    _lastRecordedLat = lat;
+    _lastRecordedLng = lng;
+    persistFilterState(lat, lng, loc.timestamp);
+    useLocationStore.getState().addPoint(point);
+    publishLocation(point.lat, point.lng, point.speed, point.heading);
+    insertLocationPoint(point).catch((e: any) =>
+      console.warn('[LocationService] DB write skipped:', e?.message ?? e)
+    );
+    processNewPoint(point).catch((e: any) =>
+      console.warn('[LocationService] Visit detection skipped:', e?.message ?? e)
+    );
+  } catch (e: any) {
+    if (!e?.message?.includes('forEach')) console.warn('[LocationService] Point fault:', e);
+  }
 }
 
 // ─── Foreground tracking ──────────────────────────────────────────────────────
@@ -329,37 +458,7 @@ async function startForegroundTracking(): Promise<void> {
 
   _locationSubscription = await Location.watchPositionAsync(
     getTrackingParams(),
-    async (loc) => {
-      try {
-        const raw = locationObjectToPoint(loc, _currentUserId);
-        if (!raw) return;
-
-        // Step 1: Filter (no smoothing yet)
-        const result = evaluatePoint(raw.lat, raw.lng, raw.accuracy, loc.timestamp);
-        if (result === 'reject') return;
-        // Always advance the throttle clock so subsequent points are evaluated
-        _lastAcceptedTime = loc.timestamp;
-        if (result === 'lock') return; // stationary — keep marker at last position
-
-        // Step 2: Smooth only accepted points
-        const { lat, lng } = smoothAccepted(raw.lat, raw.lng);
-        const point = { ...raw, lat, lng };
-        _lastRecordedLat = lat;
-        _lastRecordedLng = lng;
-        // Update UI immediately — do not wait on DB writes
-        useLocationStore.getState().addPoint(point);
-        publishLocation(point.lat, point.lng, point.speed, point.heading);
-        // Fire-and-forget persistence
-        insertLocationPoint(point).catch((e: any) =>
-          console.warn('[LocationService] Foreground DB write skipped:', e?.message ?? e)
-        );
-        processNewPoint(point).catch((e: any) =>
-          console.warn('[LocationService] Foreground visit detection skipped:', e?.message ?? e)
-        );
-      } catch (e: any) {
-        if (!e?.message?.includes('forEach')) console.warn('[LocationService] Foreground fault:', e);
-      }
-    }
+    (loc) => { processRawPoint(loc); }
   );
 }
 
@@ -451,4 +550,105 @@ function locationObjectToPoint(
     recordedAt: new Date(loc.timestamp).toISOString(),
     createdAt: new Date().toISOString(),
   };
+}
+
+// ─── Mock GPS (dev only) ──────────────────────────────────────────────────────
+//
+// Emits fake location points through the exact same filter → smooth → persist
+// pipeline as real GPS. Use it to draw paths and test tracking without moving.
+//
+// Usage (in any dev screen):
+//   import { startMockTracking, stopMockTracking, isMockTracking } from '@services/locationService';
+
+/**
+ * ~640 m rectangular walking loop around Tashkent city centre.
+ * Each waypoint is ~20 m from the previous one (normal walking pace).
+ * Extend or replace these with any coordinates you like.
+ */
+const MOCK_ROUTE: Array<{ lat: number; lng: number }> = [
+  // North leg ↑
+  { lat: 41.2990, lng: 69.2400 },
+  { lat: 41.2992, lng: 69.2400 },
+  { lat: 41.2994, lng: 69.2400 },
+  { lat: 41.2996, lng: 69.2400 },
+  { lat: 41.2998, lng: 69.2400 },
+  { lat: 41.3000, lng: 69.2400 },
+  { lat: 41.3002, lng: 69.2400 },
+  { lat: 41.3004, lng: 69.2400 },
+  // East leg →
+  { lat: 41.3004, lng: 69.2402 },
+  { lat: 41.3004, lng: 69.2405 },
+  { lat: 41.3004, lng: 69.2407 },
+  { lat: 41.3004, lng: 69.2409 },
+  { lat: 41.3004, lng: 69.2412 },
+  { lat: 41.3004, lng: 69.2414 },
+  { lat: 41.3004, lng: 69.2416 },
+  { lat: 41.3004, lng: 69.2419 },
+  // South leg ↓
+  { lat: 41.3002, lng: 69.2419 },
+  { lat: 41.3000, lng: 69.2419 },
+  { lat: 41.2998, lng: 69.2419 },
+  { lat: 41.2996, lng: 69.2419 },
+  { lat: 41.2994, lng: 69.2419 },
+  { lat: 41.2992, lng: 69.2419 },
+  { lat: 41.2990, lng: 69.2419 },
+  // West leg ←
+  { lat: 41.2990, lng: 69.2417 },
+  { lat: 41.2990, lng: 69.2414 },
+  { lat: 41.2990, lng: 69.2412 },
+  { lat: 41.2990, lng: 69.2409 },
+  { lat: 41.2990, lng: 69.2407 },
+  { lat: 41.2990, lng: 69.2405 },
+  { lat: 41.2990, lng: 69.2402 },
+];
+
+const MOCK_INTERVAL_MS = 3000; // one point every 3 s (clears the 2.5 s throttle)
+
+let _mockInterval: ReturnType<typeof setInterval> | null = null;
+let _mockRouteIndex = 0;
+
+export function isMockTracking(): boolean {
+  return _mockInterval !== null;
+}
+
+export function startMockTracking(userId: string): void {
+  if (!__DEV__) return;
+  if (_mockInterval) return;
+
+  _currentUserId = userId;
+  _mockRouteIndex = 0;
+  resetFilterState();
+
+  console.log('[MockGPS] Started — looping', MOCK_ROUTE.length, 'waypoints at', MOCK_INTERVAL_MS, 'ms each');
+
+  _mockInterval = setInterval(() => {
+    const { lat, lng } = MOCK_ROUTE[_mockRouteIndex % MOCK_ROUTE.length];
+    _mockRouteIndex++;
+
+    const fakeLoc: Location.LocationObject = {
+      coords: {
+        latitude: lat,
+        longitude: lng,
+        accuracy: 5,          // well within the 20 m accuracy gate
+        altitude: null,
+        altitudeAccuracy: null,
+        heading: null,
+        speed: null,
+      },
+      timestamp: Date.now(),
+      mocked: true,
+    };
+
+    processRawPoint(fakeLoc);
+  }, MOCK_INTERVAL_MS);
+}
+
+export function stopMockTracking(): void {
+  if (_mockInterval) {
+    clearInterval(_mockInterval);
+    _mockInterval = null;
+    resetFilterState();
+    useLocationStore.getState().setPoints([]);
+    console.log('[MockGPS] Stopped — location store cleared');
+  }
 }

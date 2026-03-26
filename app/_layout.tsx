@@ -100,11 +100,11 @@ function PurchaseManager() {
 
 function HistoryHydrator() {
   const { session } = useAuthStore();
-  const { recentPoints, setPoints } = useLocationStore();
+  const { setPoints } = useLocationStore();
   const userId = session?.user?.id;
 
   useEffect(() => {
-    if (!userId || recentPoints.length > 0) return;
+    if (!userId) return;
     getPointsForDate(userId, todayDateString())
       .then((pts) => { if (pts.length > 0) setPoints(pts); })
       .catch(() => {});

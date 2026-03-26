@@ -244,4 +244,27 @@ export default {
     checking: 'Tekshirilmoqda...',
     skip: 'Hozircha o\'tkazib yuborish',
   },
+
+  // ── Paywall ────────────────────────────────────────────────────────────────
+  paywall: {
+    title: 'Rejani tanlang',
+    feature1: 'Cheksiz tarix takrorlari',
+    feature2: 'Kengaytirilgan odatlar tahlili',
+    feature3: 'Maxsus hayot vaqt jadvallari',
+    feature4: 'Ustuvor bulut sinxronizatsiyasi va eksport',
+    feature5: 'To\'liq joylashuv tarixiga kirish',
+    planYearly: 'Yillik',
+    planMonthly: 'Oylik',
+    planYearlySub: 'Faqat {{price}}/oy',
+    bestValue: 'Eng yaxshi narx',
+    continueBtn: 'Davom etish',
+    restorePurchases: 'Xaridlarni tiklash',
+    terms: 'Shartlar',
+    privacy: 'Maxfiylik',
+    storeUnavailableTitle: 'Do\'kon mavjud emas',
+    storeUnavailableMsg: 'Do\'konga ulanib bo\'lmadi. Qayta urinib ko\'ring.',
+    purchaseFailedTitle: 'Xarid xatosi',
+    noPurchasesTitle: 'Xaridlar topilmadi',
+    noPurchasesMsg: 'Hisobingizga bog\'liq oldingi xaridlar topilmadi.',
+  },
 } as const;
