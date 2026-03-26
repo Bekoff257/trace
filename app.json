@@ -41,6 +41,7 @@
       },
       "googleServicesFile": "./google-services.json",
       "permissions": [
+        "com.android.vending.BILLING",
         "ACCESS_COARSE_LOCATION",
         "ACCESS_FINE_LOCATION",
         "ACCESS_BACKGROUND_LOCATION",
@@ -106,8 +107,7 @@
           "sounds": []
         }
       ],
-      "@react-native-google-signin/google-signin",
-      "react-native-purchases"
+      "@react-native-google-signin/google-signin"
     ],
     "experiments": {
       "typedRoutes": true
