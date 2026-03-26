@@ -16,7 +16,7 @@
  *   - Position smoothly interpolates to the new lat/lng over 800 ms using
  *     requestAnimationFrame so the marker glides instead of teleporting.
  */
-import React, { useState, useEffect, useRef, memo } from 'react';
+import React, { useState, useEffect, useRef, memo, useCallback } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
 import { Image } from 'expo-image';
 import { Marker } from '@maplibre/maplibre-react-native';
@@ -129,13 +129,24 @@ interface FriendMarkerProps {
 const STALE_MS   = 60_000;       // >60 s  → stale  (location may be outdated)
 const OFFLINE_MS = 5 * 60_000;   // >5 min → offline (friend is not actively sharing)
 
+// Ticks every 30 s so "X ago" text stays current even when friend data doesn't change
+function useNow(intervalMs = 30_000): number {
+  const [now, setNow] = useState(() => Date.now());
+  useEffect(() => {
+    const id = setInterval(() => setNow(Date.now()), intervalMs);
+    return () => clearInterval(id);
+  }, [intervalMs]);
+  return now;
+}
+
 function FriendMarkerInner({ friend, onPress }: FriendMarkerProps) {
   if (!friend.location) return null;
 
   const { lat, lng, batteryLevel, isCharging, status, updatedAt } = friend.location;
   const pos = useSmoothPosition(lat, lng);
+  const now = useNow();
 
-  const age       = Date.now() - new Date(updatedAt).getTime();
+  const age       = now - new Date(updatedAt).getTime();
   const isStale   = age > STALE_MS;
   const isOffline = age > OFFLINE_MS;
 

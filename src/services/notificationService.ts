@@ -13,6 +13,7 @@
 import * as Notifications from 'expo-notifications';
 import { Platform } from 'react-native';
 import { router } from 'expo-router';
+import Constants from 'expo-constants';
 import { supabase } from './supabaseClient';
 
 const EXPO_PUSH_URL = 'https://exp.host/--/api/v2/push/send';
@@ -49,7 +50,10 @@ export async function registerForPushNotifications(userId: string): Promise<void
 
     if (status !== 'granted') return;
 
-    const { data: token } = await Notifications.getExpoPushTokenAsync();
+    const projectId = Constants.expoConfig?.extra?.eas?.projectId;
+    const { data: token } = await Notifications.getExpoPushTokenAsync(
+      projectId ? { projectId } : undefined
+    );
     if (!token) return;
 
     // Write to both tables so the token is always findable regardless of
